@@ -1,0 +1,14 @@
+{
+  "name": "elleven-game",
+  "version": "1.0.0",
+  "description": "Elleven Game Online",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "phaser": "^3.87.0"
+  },
+  "packageManager": "pnpm@8.6.0"
+}
