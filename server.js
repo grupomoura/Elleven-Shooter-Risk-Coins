@@ -2,8 +2,9 @@ const express = require('express');
 const path = require('path');
 const app = express();
 
-// Serve static files from the current directory
-app.use(express.static(__dirname));
+// Configurar diretórios estáticos
+app.use(express.static(__dirname)); // Serve arquivos da raiz
+app.use('/assets', express.static(path.join(__dirname, 'assets')));
 
 // Serve index.html for the root route
 app.get('/', (req, res) => {
