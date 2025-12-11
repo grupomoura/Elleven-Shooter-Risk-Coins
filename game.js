@@ -20,7 +20,7 @@ class IntroScreen extends Phaser.Scene {
             '',
             'Pressione Qualquer Tecla para iniciar o jogo'
         ];
-        
+
         let yPosition = 200;
         instructions.forEach(line => {
             this.add.text(400, yPosition, line, {
@@ -91,6 +91,8 @@ class Example extends Phaser.Scene {
         this.lastUpdateTime = 0; // New property to track the last update time
         this.pacifistTimer = 0; // New property to track time for Pacifist achievement
         this.pacifistTimerText = null; // New property to store the pacifist timer text object
+        this.playerLives = 0; // Extra lives counter
+        this.currentLevel = 1; // Current level (1 = first boss, 2 = second boss, etc.)
     }
     create() {
         // Initialize game objects and other elements
@@ -141,6 +143,14 @@ class Example extends Phaser.Scene {
         this.load.image('enemy3', 'assets/enemy3.png');
         this.load.image('background', 'assets/background.jpg');
         this.load.image('star', 'assets/bitcoin.png');
+        // New assets for coins and life
+        this.load.image('coin1', 'assets/coin1.png');
+        this.load.image('coin2', 'assets/coin2.png');
+        this.load.image('coin3', 'assets/coin3.png');
+        this.load.image('life', 'assets/life.png');
+        // New boss sprites (GIF as sprite)
+        this.load.image('enemy4', 'assets/anemy01.gif');
+        this.load.image('enemy5', 'assets/anemy02.gif');
         this.load.audio('backgroundMusic', 'assets/goa.mp3');
         this.load.audio('boomSound', 'assets/boom.mp3');
         this.load.audio('hitSound', 'assets/hit.mp3');
@@ -152,6 +162,17 @@ class Example extends Phaser.Scene {
         this.load.audio('cashSound', 'assets/cash_10.mp3');
     }
     create() {
+        // Reset game state variables on scene start/restart
+        this.gameOver = false;
+        this.heroDestroyed = false;
+        this.gameWon = false;
+        this.enemy3Destroyed = false;
+        this.playerLives = 0;
+        this.currentLevel = 1;
+        this.score = 0;
+        this.enemyKillCount = 0;
+        this.starCounter = 0;
+
         // Set the game start time
         this.gameStartTime = this.time.now;
         // Initialize lastKillTime at the start of the game
@@ -345,6 +366,14 @@ class Example extends Phaser.Scene {
         this.gameTimerText.setOrigin(1, 1);
         this.gameTimerText.setAlpha(0); // Make the timer invisible
 
+        // Add lives display
+        this.livesIcon = this.add.image(760, 16, 'life').setScale(0.4);
+        this.livesIcon.setOrigin(1, 0);
+        this.livesText = this.add.text(770, 16, 'x' + this.playerLives, {
+            fontSize: '24px',
+            fill: '#ff6666'
+        }).setOrigin(0, 0);
+
     }
     createExplosion(x, y, enemyType) {
         const explosion = this.add.group();
@@ -375,7 +404,23 @@ class Example extends Phaser.Scene {
             const enemyOne = this.enemies.create(Phaser.Math.Between(0, 800), 0, 'enemy1');
             enemyOne.setScale(0.3); // Set the scale to 50% of original size
             enemyOne.setVelocityY(100);
+            // Add random horizontal movement (drift left/right)
+            enemyOne.setVelocityX(Phaser.Math.Between(-50, 50));
             enemyOne.health = 5; // Set the health value of the enemy to 5
+            enemyOne.originalX = enemyOne.x; // Store original X for reference
+
+            // Add periodic direction change for more organic movement
+            this.time.addEvent({
+                delay: Phaser.Math.Between(1000, 3000),
+                callback: () => {
+                    if (enemyOne.active) {
+                        enemyOne.setVelocityX(Phaser.Math.Between(-60, 60));
+                    }
+                },
+                callbackScope: this,
+                loop: true
+            });
+
             if (this.time.now >= 35000) { // Only start firing if 35 seconds have passed
                 this.scheduleNextEnemyShot(enemyOne);
             }
@@ -383,7 +428,8 @@ class Example extends Phaser.Scene {
             if (this.enemy1RandomStop && Math.random() < 0.5) { // 50% chance to stop
                 this.time.delayedCall(3000, () => {
                     if (enemyOne.active) {
-                        enemyOne.setVelocity(0, 0);
+                        enemyOne.setVelocityY(0);
+                        // Keep horizontal movement when stopped vertically
                     }
                 });
             }
@@ -645,15 +691,16 @@ class Example extends Phaser.Scene {
                     const dy = enemy.y - bullet.y;
                     const distance = Math.sqrt(dx * dx + dy * dy);
                     let hitDistance = 50;
-                    if (enemy.texture.key === 'enemy3') {
-                        hitDistance = 110; // Use 110 pixels for Enemy 3
+                    if (enemy.texture.key === 'enemy3' || enemy.texture.key === 'enemy4' || enemy.texture.key === 'enemy5') {
+                        hitDistance = 110; // Use 110 pixels for bosses
                     }
                     if (distance < hitDistance) {
                         this.createBulletExplosion(bullet.x, bullet.y);
                         bullet.destroy();
                         enemy.health -= 1; // Always decrease enemy health by 1
                         this.playHitSound(); // Play hit sound
-                        if (enemy.texture.key === 'enemy3') {
+                        // Update health bar for any boss
+                        if (enemy.texture.key === 'enemy3' || enemy.texture.key === 'enemy4' || enemy.texture.key === 'enemy5') {
                             this.updateEnemy3HealthBar(enemy);
                         }
                         if (enemy.health <= 0) {
@@ -685,18 +732,22 @@ class Example extends Phaser.Scene {
                             } else if (enemyType === 'enemy2') {
                                 this.score += 10;
                             } else if (enemyType === 'enemy3') {
-                                this.unlockAchievement('bossKill'); // Ensure Boss Slayer achievement is unlocked
-                                this.score += 1000; // Changed from 5000 to 1000
+                                this.unlockAchievement('bossKill');
+                                this.score += 1000;
+                            } else if (enemyType === 'enemy4') {
+                                this.score += 1500;
+                            } else if (enemyType === 'enemy5') {
+                                this.unlockAchievement('bossKill');
+                                this.score += 2000;
                             }
                             this.scoreText.setText('Score: ' + this.score);
-                            if (enemyType === 'enemy3') {
+                            // Handle boss destruction
+                            if (enemyType === 'enemy3' || enemyType === 'enemy4' || enemyType === 'enemy5') {
                                 this.enemy3HealthBar.destroy();
                                 this.enemy3Destroyed = true;
-                                // Remove all enemy ships
                                 this.enemies.clear(true, true);
-                                // Remove all enemy bullets
                                 this.enemyBullets.clear(true, true);
-                                this.playSeriesOfExplosions(); // Play series of explosion sounds
+                                this.playSeriesOfExplosions();
                                 this.time.delayedCall(2000, this.showWinScreen, [], this);
                             } else if (enemyType === 'enemy1' && !this.enemy3Destroyed) {
                                 // Play explosion sound again after an eighth of a second
@@ -759,56 +810,64 @@ class Example extends Phaser.Scene {
         if (powerUp.countdownEvent) {
             powerUp.countdownEvent.remove();
         }
+
+        const dropType = powerUp.dropType || 'upgrade';
         powerUp.destroy();
-        // Calculate and add score for collecting a star
+
+        // Handle different drop types
+        if (dropType === 'coin') {
+            // Coin drop - add score only, no weapon upgrade
+            const coinScore = 50 + (25 * hero.weaponPower);
+            this.score += coinScore;
+            this.scoreText.setText('Score: ' + this.score);
+            this.sound.play('cashSound', { volume: 0.4 });
+            return;
+        }
+
+        if (dropType === 'life') {
+            // Life drop - add extra life
+            this.playerLives++;
+            this.livesText.setText('x' + this.playerLives);
+            this.sound.play('shieldSound', { volume: 0.6 });
+            return;
+        }
+
+        // Upgrade drop (original behavior)
         const starScore = 10 * hero.weaponPower;
         this.score += starScore;
         this.scoreText.setText('Score: ' + this.score);
-        this.lastStarCollectionTime = this.time.now; // Update the last star collection time
+        this.lastStarCollectionTime = this.time.now;
         let weaponLevelIncreased = false;
-        this.starsCollectedBeforeExpire++; // Always increment the stars collected counter
-        // Update perfectionist counter text
+        this.starsCollectedBeforeExpire++;
 
         if (hero.weaponPower < 8) {
             this.starCounter++;
             if (hero.weaponPower < 3) {
-                this.starsCollectedWithoutUpgrade++; // Increment the counter for Nuts! achievement only if weapon power is below 3
+                this.starsCollectedWithoutUpgrade++;
             }
             if (this.starCounter === 6) {
-                // Increase the hero's weapon power up to a maximum of 8
                 hero.weaponPower++;
                 weaponLevelIncreased = true;
-                this.weaponUpgraded = true; // Set the flag to indicate weapon upgrade
-                // Check if boss is present and set the upgradeDuringBossFight flag
+                this.weaponUpgraded = true;
                 if (this.enemies.getChildren().some(enemy => enemy.texture.key === 'enemy3')) {
                     this.upgradeDuringBossFight = true;
                 }
-                // Reset star counter
                 this.starCounter = 0;
-                // Update the weapon power display
                 this.updateWeaponPowerDisplay();
-                // Check for "Lucky" achievement
                 if (this.gameplayStarted && this.time.now - this.gameStartTime <= 21000) {
                     this.unlockAchievement('lucky');
                 } else if (!this.gameplayStarted) {
-                    // If gameplay hasn't started, update the game start time
                     this.gameStartTime = this.time.now;
                 }
             }
         }
-        // Play appropriate sound
+
         if (weaponLevelIncreased) {
-            this.sound.play('lowBellSound', {
-                volume: 0.5
-            });
+            this.sound.play('lowBellSound', { volume: 0.5 });
         } else {
-            this.sound.play('bellSound', {
-                volume: 0.5
-            });
+            this.sound.play('bellSound', { volume: 0.5 });
         }
-        // Update star icons
         this.updateStarIcons();
-        // Check for Perfectionist achievement
         this.checkAchievements();
     }
     updateStarIcons() {
@@ -894,29 +953,60 @@ class Example extends Phaser.Scene {
         if (this.hero && this.hero.active) {
             const heroX = this.hero.x;
             const heroY = this.hero.y;
+
+            // Check if player has extra lives
+            if (this.playerLives > 0) {
+                // Use an extra life - respawn
+                this.playerLives--;
+                this.livesText.setText('x' + this.playerLives);
+
+                // Create explosion effect
+                this.createExplosion(heroX, heroY, 'hero');
+                this.playExplosionSound();
+
+                // Respawn hero at bottom center with invincibility
+                this.hero.x = 400;
+                this.hero.y = 500;
+                this.hero.weaponPower = 1;
+                this.starCounter = 0;
+                this.updateWeaponPowerDisplay();
+                this.updateStarIcons();
+
+                // Make hero invincible for 3 seconds after respawn
+                this.hero.isInvincible = true;
+                this.hero.setAlpha(0.5);
+                this.playShieldSound();
+
+                this.time.delayedCall(3000, () => {
+                    if (this.hero && this.hero.active) {
+                        this.hero.isInvincible = false;
+                        this.hero.setAlpha(1);
+                    }
+                });
+                return; // Don't show game over
+            }
+
+            // No extra lives - game over
             this.createExplosion(heroX, heroY, 'hero');
             this.hero.setActive(false).setVisible(false);
-            this.heroDestroyed = true; // Set the flag to indicate hero has been destroyed
-            this.gameOver = true; // Set the game over flag
-            // Disable player input
+            this.heroDestroyed = true;
+            this.gameOver = true;
             this.input.keyboard.enabled = false;
-            // Play explosion sound immediately
             this.playExplosionSound();
-            // Wait for 1 second before showing 'Game Over' and options
+
             this.time.delayedCall(1000, () => {
-                // Create a semi-transparent black overlay
                 const overlay = this.add.rectangle(400, 300, 800, 600, 0x000000, 0.7);
                 overlay.setDepth(1000);
                 this.add.text(400, 300, 'Game Over', {
                     fontSize: '64px',
                     fill: '#fff'
                 }).setOrigin(0.5).setDepth(1001);
-                const restartText = this.add.text(400, 350, 'Atualize a página para jogar novamente', {
+                this.add.text(400, 350, 'Pressione qualquer tecla para reiniciar', {
                     fontSize: '24px',
                     fill: '#fff'
                 }).setOrigin(0.5).setDepth(1001);
-                // Add key listener for spacebar to restart the game
-                this.input.keyboard.once('keydown-SPACE', () => {
+                this.input.keyboard.enabled = true;
+                this.input.keyboard.once('keydown', () => {
                     this.scene.start('IntroScreen');
                 });
             }, [], this);
@@ -943,10 +1033,30 @@ class Example extends Phaser.Scene {
     }
     enemyOneFire(enemy) {
         if (enemy.active && this.hero && this.hero.active) {
-            const bullet = this.enemyBullets.create(enemy.x, enemy.y + 30, 'Cannon_bullet');
-            bullet.setTint(0xff0000); // Make enemy bullets red
-            const angle = Phaser.Math.Angle.Between(enemy.x, enemy.y, this.hero.x, this.hero.y);
-            this.physics.velocityFromRotation(angle, 200, bullet.body.velocity);
+            // Add shake/tremble effect before firing
+            const originalX = enemy.x;
+            const originalY = enemy.y;
+            const shakeDuration = 200;
+            const shakeIntensity = 3;
+
+            // Create shake effect using tweens
+            this.tweens.add({
+                targets: enemy,
+                x: originalX + shakeIntensity,
+                duration: 25,
+                yoyo: true,
+                repeat: 3,
+                ease: 'Sine.easeInOut',
+                onComplete: () => {
+                    if (enemy.active && this.hero && this.hero.active) {
+                        // Fire bullet from enemy's current position
+                        const bullet = this.enemyBullets.create(enemy.x, enemy.y + 30, 'Cannon_bullet');
+                        bullet.setTint(0xff0000); // Make enemy bullets red
+                        const angle = Phaser.Math.Angle.Between(enemy.x, enemy.y, this.hero.x, this.hero.y);
+                        this.physics.velocityFromRotation(angle, 200, bullet.body.velocity);
+                    }
+                }
+            });
         }
     }
     createEnemyThree() {
@@ -958,8 +1068,8 @@ class Example extends Phaser.Scene {
         }
         enemyThree.setScale(1.2);
         enemyThree.setVelocityY(100); // Set initial downward velocity
-        enemyThree.health = 300;
-        enemyThree.maxHealth = 300;
+        enemyThree.health = 150;
+        enemyThree.maxHealth = 150;
         enemyThree.bulletVariance = 20;
         enemyThree.fireDelay = 1000;
         enemyThree.isMovingHorizontally = false;
@@ -970,10 +1080,17 @@ class Example extends Phaser.Scene {
             volume: 0.3
         });
 
-        // Stop the enemy after 2 seconds
+        // Stop the enemy after 2 seconds and start slow horizontal movement
         this.time.delayedCall(2000, () => {
             if (enemyThree.active) {
-                enemyThree.setVelocity(0, 0);
+                enemyThree.setVelocityY(0);
+                // Start slow horizontal movement immediately after stopping
+                this.time.delayedCall(500, () => {
+                    if (enemyThree.active) {
+                        enemyThree.isMovingHorizontally = true;
+                        enemyThree.setVelocityX(60); // Slow horizontal movement
+                    }
+                });
             }
         }, [], this);
         // Create the health bar
@@ -1144,70 +1261,282 @@ class Example extends Phaser.Scene {
             this.enemy3HealthBar.fillRect(x, y + barHeight - remainingHealthHeight, barWidth, remainingHealthHeight);
         }
     }
+    // Second boss - Enemy Four (anemy01.gif)
+    createEnemyFour() {
+        const screenWidth = this.sys.game.config.width;
+        const enemyFour = this.enemies.create(screenWidth / 2, -100, 'enemy4');
+        if (!enemyFour) {
+            console.error('Failed to create enemy 4');
+            return;
+        }
+        enemyFour.setScale(0.8);
+        enemyFour.setVelocityY(80);
+        enemyFour.health = 188;
+        enemyFour.maxHealth = 188;
+        enemyFour.boss = true;
+
+        this.sound.play('alarmSound', { volume: 0.3 });
+
+        // Stop and start zigzag movement after 2.5 seconds
+        this.time.delayedCall(2500, () => {
+            if (enemyFour.active) {
+                enemyFour.setVelocityY(0);
+                enemyFour.setVelocityX(80);
+
+                // Zigzag pattern - reverse direction every 2 seconds
+                this.time.addEvent({
+                    delay: 2000,
+                    callback: () => {
+                        if (enemyFour.active) {
+                            enemyFour.setVelocityX(-enemyFour.body.velocity.x);
+                        }
+                    },
+                    loop: true
+                });
+            }
+        });
+
+        // Create health bar
+        this.enemy3HealthBar = this.add.graphics();
+        this.updateEnemy3HealthBar(enemyFour);
+
+        // Attack pattern 1: Diagonal sweep (different from enemy3)
+        this.time.delayedCall(3000, () => {
+            this.startEnemyFourAttack(enemyFour);
+        });
+    }
+    startEnemyFourAttack(enemy) {
+        if (enemy.active) {
+            // Fire diagonal sweep pattern
+            for (let angle = 30; angle <= 150; angle += 20) {
+                this.time.delayedCall((angle - 30) * 30, () => {
+                    if (enemy.active) {
+                        this.createEnemyBullet(enemy.x, enemy.y + 50, angle);
+                    }
+                });
+            }
+            // Fire reverse sweep
+            this.time.delayedCall(600, () => {
+                for (let angle = 150; angle >= 30; angle -= 20) {
+                    this.time.delayedCall((150 - angle) * 30, () => {
+                        if (enemy.active) {
+                            this.createEnemyBullet(enemy.x, enemy.y + 50, angle);
+                        }
+                    });
+                }
+            });
+            // Repeat pattern
+            this.time.delayedCall(2500, () => {
+                this.startEnemyFourAttack(enemy);
+            });
+        }
+    }
+    // Third boss - Enemy Five (anemy02.gif)
+    createEnemyFive() {
+        const screenWidth = this.sys.game.config.width;
+        const enemyFive = this.enemies.create(screenWidth / 2, -120, 'enemy5');
+        if (!enemyFive) {
+            console.error('Failed to create enemy 5');
+            return;
+        }
+        enemyFive.setScale(1.0);
+        enemyFive.setVelocityY(60);
+        enemyFive.health = 235;
+        enemyFive.maxHealth = 235;
+        enemyFive.boss = true;
+
+        this.sound.play('alarmSound', { volume: 0.4 });
+
+        // Stop and start circular movement after 3 seconds
+        this.time.delayedCall(3000, () => {
+            if (enemyFive.active) {
+                enemyFive.setVelocityY(0);
+                // Circular movement pattern
+                let angle = 0;
+                this.time.addEvent({
+                    delay: 50,
+                    callback: () => {
+                        if (enemyFive.active) {
+                            angle += 0.05;
+                            const radius = 100;
+                            const centerX = screenWidth / 2;
+                            const centerY = 150;
+                            enemyFive.x = centerX + Math.cos(angle) * radius;
+                            enemyFive.y = centerY + Math.sin(angle) * radius * 0.5;
+                        }
+                    },
+                    loop: true
+                });
+            }
+        });
+
+        // Create health bar
+        this.enemy3HealthBar = this.add.graphics();
+        this.updateEnemy3HealthBar(enemyFive);
+
+        // Attack pattern: Spiral burst (unique pattern)
+        this.time.delayedCall(4000, () => {
+            this.startEnemyFiveAttack(enemyFive);
+        });
+    }
+    startEnemyFiveAttack(enemy) {
+        if (enemy.active) {
+            // Spiral burst pattern - fires bullets in expanding spiral
+            let burstAngle = 0;
+            for (let i = 0; i < 12; i++) {
+                this.time.delayedCall(i * 100, () => {
+                    if (enemy.active) {
+                        this.createEnemyBullet(enemy.x, enemy.y + 30, burstAngle + (i * 30));
+                        this.createEnemyBullet(enemy.x, enemy.y + 30, burstAngle + (i * 30) + 180);
+                    }
+                });
+            }
+            // Aimed shot at player
+            this.time.delayedCall(1500, () => {
+                if (enemy.active && this.hero && this.hero.active) {
+                    const angle = Phaser.Math.Angle.Between(enemy.x, enemy.y, this.hero.x, this.hero.y);
+                    const angleDeg = Phaser.Math.RadToDeg(angle);
+                    this.createEnemyBullet(enemy.x, enemy.y + 30, angleDeg);
+                    this.createEnemyBullet(enemy.x - 30, enemy.y + 20, angleDeg);
+                    this.createEnemyBullet(enemy.x + 30, enemy.y + 20, angleDeg);
+                }
+            });
+            // Repeat pattern
+            this.time.delayedCall(3000, () => {
+                this.startEnemyFiveAttack(enemy);
+            });
+        }
+    }
     spawnPowerUp(x, y) {
-        const powerUp = this.powerUps.create(x, y, 'star');
-        powerUp.setScale(0.5); // Reduce the scale to 3% of original size to match the icons
-        powerUp.setVelocity(Phaser.Math.Between(-150, 150), Phaser.Math.Between(-150, 150)); // Tripled speed
-        powerUp.setCollideWorldBounds(true);
-        powerUp.setBounce(1);
-        // Set a lifespan for the power-up (10 seconds)
-        powerUp.expirationTimer = this.time.delayedCall(10000, () => {
-            this.expirePowerUp(powerUp);
+        // Determine drop type based on probability
+        const dropChance = Math.random();
+
+        if (dropChance < 0.10) {
+            // 10% chance - Life drop
+            this.spawnLife(x, y);
+        } else if (dropChance < 0.25) {
+            // 15% chance - Coin drop (score only)
+            this.spawnCoin(x, y);
+        } else {
+            // 75% chance - Weapon upgrade (bitcoin)
+            const powerUp = this.powerUps.create(x, y, 'star');
+            powerUp.setScale(0.5);
+            powerUp.setVelocity(Phaser.Math.Between(-150, 150), Phaser.Math.Between(-150, 150));
+            powerUp.setCollideWorldBounds(true);
+            powerUp.setBounce(1);
+            powerUp.dropType = 'upgrade';
+            powerUp.expirationTimer = this.time.delayedCall(10000, () => {
+                this.expirePowerUp(powerUp);
+            });
+        }
+    }
+    spawnCoin(x, y) {
+        // Randomly select one of the 3 coin types
+        const coinTypes = ['coin1', 'coin2', 'coin3'];
+        const selectedCoin = Phaser.Utils.Array.GetRandom(coinTypes);
+
+        const coin = this.powerUps.create(x, y, selectedCoin);
+        coin.setScale(0.5);
+        coin.setVelocity(Phaser.Math.Between(-150, 150), Phaser.Math.Between(-150, 150));
+        coin.setCollideWorldBounds(true);
+        coin.setBounce(1);
+        coin.dropType = 'coin';
+        coin.expirationTimer = this.time.delayedCall(10000, () => {
+            this.expirePowerUp(coin);
+        });
+    }
+    spawnLife(x, y) {
+        const life = this.powerUps.create(x, y, 'life');
+        life.setScale(0.5);
+        life.setVelocity(Phaser.Math.Between(-100, 100), Phaser.Math.Between(-100, 100));
+        life.setCollideWorldBounds(true);
+        life.setBounce(1);
+        life.dropType = 'life';
+        life.expirationTimer = this.time.delayedCall(12000, () => {
+            this.expirePowerUp(life);
         });
     }
     expirePowerUp(powerUp) {
         if (powerUp.active) {
             powerUp.destroy();
-            this.starsCollectedBeforeExpire = 0; // Reset the counter when a star expires
-            // Update perfectionist counter text
+            if (powerUp.dropType === 'upgrade') {
+                this.starsCollectedBeforeExpire = 0; // Reset counter only for upgrade stars
+            }
         }
     }
     showWinScreen() {
         if (!this.gameWon) {
+            // Check if there are more levels
+            if (this.currentLevel < 3) {
+                // Advance to next level
+                this.currentLevel++;
+                this.enemy3Destroyed = false; // Reset for next boss
+
+                // Show level transition message
+                const levelText = this.add.text(400, 300, `Level ${this.currentLevel}!`, {
+                    fontSize: '64px',
+                    fill: '#ffff00'
+                }).setOrigin(0.5).setDepth(1001);
+
+                this.add.text(400, 360, 'Novo Chefe Chegando!', {
+                    fontSize: '32px',
+                    fill: '#fff'
+                }).setOrigin(0.5).setDepth(1001);
+
+                // Fade out and spawn next boss
+                this.time.delayedCall(2000, () => {
+                    levelText.destroy();
+                    if (this.currentLevel === 2) {
+                        this.createEnemyFour();
+                    } else if (this.currentLevel === 3) {
+                        this.createEnemyFive();
+                    }
+                });
+                return;
+            }
+
+            // Final victory - all bosses defeated
             this.gameWon = true;
-            // Parar todos os sons
             this.sound.stopAll();
-            // Tocar música de banda de metais
             this.sound.play('brassBandMusic', {
                 loop: true,
                 volume: 0.7
             });
-            // Criar uma sobreposição preta semitransparente
             const overlay = this.add.rectangle(400, 300, 800, 600, 0x000000, 0.7);
             overlay.setDepth(1000);
-            // Adicionar texto de vitória
-            this.add.text(400, 300, 'Você Venceu!', {
+            this.add.text(400, 280, 'Você Venceu!', {
                 fontSize: '64px',
                 fill: '#fff'
             }).setOrigin(0.5).setDepth(1001);
-            this.add.text(400, 350, 'Parabéns!', {
+            this.add.text(400, 340, 'Todos os Chefes Derrotados!', {
                 fontSize: '32px',
-                fill: '#fff'
+                fill: '#00ff00'
             }).setOrigin(0.5).setDepth(1001);
-            // Exibir a pontuação do jogador
             this.add.text(400, 400, `Sua Pontuação: ${this.score}`, {
                 fontSize: '28px',
                 fill: '#fff'
             }).setOrigin(0.5).setDepth(1001);
-            // Adicionar a nova mensagem se a pontuação for menor que 10.000
-            if (this.score < 10000) {
-                this.add.text(400, 450, 'Consegue superar 10.000 pontos?', {
+            if (this.score < 15000) {
+                this.add.text(400, 450, 'Consegue superar 15.000 pontos?', {
                     fontSize: '24px',
                     fill: '#ffff00'
                 }).setOrigin(0.5).setDepth(1001);
             } else {
-                this.add.text(400, 450, 'Você superou 10.000 pontos!!', {
+                this.add.text(400, 450, 'Você superou 15.000 pontos!!', {
                     fontSize: '24px',
                     fill: '#00ff00'
                 }).setOrigin(0.5).setDepth(1001);
             }
-            this.add.text(400, 500, 'Atualize para jogar novamente', {
+            this.add.text(400, 500, 'Pressione qualquer tecla para reiniciar', {
                 fontSize: '24px',
                 fill: '#fff'
             }).setOrigin(0.5).setDepth(1001);
+            this.input.keyboard.once('keydown', () => {
+                this.scene.start('IntroScreen');
+            });
         }
     }
-    
+
     playExplosionSound() {
         this.sound.play('boomSound', {
             volume: 0.7
@@ -1351,7 +1680,7 @@ class Example extends Phaser.Scene {
             'greedy': 'Ganancioso',
             'flyingBlind': 'Voo Cego'
         };
-        
+
         return achievementMap[key] || key;
     }
 }
@@ -1593,7 +1922,7 @@ class AchievementsScreen extends Phaser.Scene {
             name: 'Veterano',
             description: 'Mate 6.000 inimigos em todos os jogos'
         }];
-        
+
         let yPos = 80; // Changed from 90 to 80
         achievements.forEach(achievement => {
             const achieved = localStorage.getItem(achievement.key) === 'true';
