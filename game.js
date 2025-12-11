@@ -3,11 +3,13 @@ class IntroScreen extends Phaser.Scene {
         super('IntroScreen');
     }
     create() {
+        const centerX = this.scale.width / 2;
+        const centerY = this.scale.height / 2;
         // Add background
-        this.add.rectangle(400, 300, 800, 600, 0x000000);
+        this.add.rectangle(centerX, centerY, this.scale.width, this.scale.height, 0x000000);
         // Add title
-        this.add.text(400, 100, 'Elleven Star Shooter', {
-            fontSize: '64px',
+        this.add.text(centerX, 100, 'Elleven Star Shooter', {
+            fontSize: '48px',
             fill: '#ffffff'
         }).setOrigin(0.5);
         // Add game instructions
@@ -23,9 +25,10 @@ class IntroScreen extends Phaser.Scene {
 
         let yPosition = 200;
         instructions.forEach(line => {
-            this.add.text(400, yPosition, line, {
-                fontSize: '24px',
-                fill: '#ffffff'
+            this.add.text(centerX, yPosition, line, {
+                fontSize: '20px',
+                fill: '#ffffff',
+                wordWrap: { width: this.scale.width - 40 }
             }).setOrigin(0.5);
             yPosition += 40;
         });
@@ -45,6 +48,13 @@ class IntroScreen extends Phaser.Scene {
                 this.scene.start('Example');
             }
         });
+        // Add touch listener to start the game (ignoring interactive objects like the button)
+        this.input.on('pointerdown', (pointer, gameObjects) => {
+            if (gameObjects.length === 0) {
+                this.scene.start('Example');
+            }
+        });
+
         // Add specific listener for the space key
         this.input.keyboard.once('keydown-SPACE', () => {
             this.scene.start('Example');
@@ -107,10 +117,11 @@ class Example extends Phaser.Scene {
             fontSize: '24px',
             fill: '#fff'
         });
-        // Add mouse control
+        // Add mouse/touch control
         this.input.on('pointermove', (pointer) => {
             if (this.hero && this.hero.active) {
-                this.hero.x = Phaser.Math.Clamp(pointer.x, 0, this.game.config.width);
+                this.hero.x = Phaser.Math.Clamp(pointer.x, 0, this.scale.width);
+                this.hero.y = Phaser.Math.Clamp(pointer.y, 0, this.scale.height);
             }
         });
 
@@ -177,18 +188,21 @@ class Example extends Phaser.Scene {
         this.gameStartTime = this.time.now;
         // Initialize lastKillTime at the start of the game
         this.lastKillTime = this.time.now;
+
+        // Ensure input is enabled
+        this.input.keyboard.enabled = true;
         // Create a tiling sprite for the scrolling background
-        this.background = this.add.tileSprite(400, 300, 800, 600, 'background')
+        this.background = this.add.tileSprite(this.scale.width / 2, this.scale.height / 2, this.scale.width, this.scale.height, 'background')
             .setOrigin(0.5)
             .setAlpha(0.3);
         // Initialize enemy kill counter
         this.enemyKillCount = 0;
         // Add the hero sprite to the scene
         // Create a white shield underneath the hero
-        this.shield = this.add.circle(400, 300, 28, 0xffffff);
+        this.shield = this.add.circle(this.scale.width / 2, this.scale.height - 100, 28, 0xffffff);
         this.shield.setDepth(0); // Set the depth to 0 to ensure it's drawn underneath
         // Add the hero sprite to the scene
-        this.hero = this.physics.add.sprite(400, 300, 'hero');
+        this.hero = this.physics.add.sprite(this.scale.width / 2, this.scale.height - 100, 'hero');
         this.hero.setCollideWorldBounds(true);
         this.hero.setDepth(1); // Set the depth to 1 to ensure it's drawn above the shield
         this.hero.weaponPower = 1; // Initialize weapon power to 1
@@ -359,7 +373,7 @@ class Example extends Phaser.Scene {
         }
         // Add invisible game timer
         this.gameTimer = 0;
-        this.gameTimerText = this.add.text(780, 580, '0:00', {
+        this.gameTimerText = this.add.text(this.scale.width - 20, this.scale.height - 20, '0:00', {
             fontSize: '24px',
             fill: '#ffffff'
         });
@@ -367,9 +381,9 @@ class Example extends Phaser.Scene {
         this.gameTimerText.setAlpha(0); // Make the timer invisible
 
         // Add lives display
-        this.livesIcon = this.add.image(760, 16, 'life').setScale(0.4);
+        this.livesIcon = this.add.image(this.scale.width - 40, 16, 'life').setScale(0.4);
         this.livesIcon.setOrigin(1, 0);
-        this.livesText = this.add.text(770, 16, 'x' + this.playerLives, {
+        this.livesText = this.add.text(this.scale.width - 30, 16, 'x' + this.playerLives, {
             fontSize: '24px',
             fill: '#ff6666'
         }).setOrigin(0, 0);
@@ -401,7 +415,7 @@ class Example extends Phaser.Scene {
     createEnemyOne() {
         const enemy1Count = this.enemies.getChildren().filter(enemy => enemy.texture.key === 'enemy1').length;
         if (enemy1Count < 15 && !this.enemy3Destroyed) {
-            const enemyOne = this.enemies.create(Phaser.Math.Between(0, 800), 0, 'enemy1');
+            const enemyOne = this.enemies.create(Phaser.Math.Between(0, this.scale.width), 0, 'enemy1');
             enemyOne.setScale(0.3); // Set the scale to 50% of original size
             enemyOne.setVelocityY(100);
             // Add random horizontal movement (drift left/right)
@@ -437,7 +451,7 @@ class Example extends Phaser.Scene {
     }
     createEnemyTwo(x = null, y = null) {
         if (!this.enemy3Destroyed) {
-            const enemyTwo = this.enemies.create(x || Phaser.Math.Between(0, 800), y || 0, 'enemy2');
+            const enemyTwo = this.enemies.create(x || Phaser.Math.Between(0, this.scale.width), y || 0, 'enemy2');
             enemyTwo.setScale(0.2); // Set the scale to 20% of original size
             enemyTwo.setVelocityY(150 * this.enemy2SpeedMultiplier); // Apply speed multiplier
             if (this.applyHorizontalVelocity) {
@@ -599,7 +613,7 @@ class Example extends Phaser.Scene {
         }
         // Handle enemy bullets
         this.enemyBullets.getChildren().forEach((bullet) => {
-            if (bullet.y > 600 || bullet.y < 0 || bullet.x > 800 || bullet.x < 0) {
+            if (bullet.y > this.scale.height || bullet.y < 0 || bullet.x > this.scale.width || bullet.x < 0) {
                 bullet.destroy();
             }
             if (this.hero && this.hero.active) {
@@ -664,20 +678,20 @@ class Example extends Phaser.Scene {
             }
             // Check for bullet-enemy collisions and off-screen enemies
             this.enemies.getChildren().forEach((enemy) => {
-                if (enemy.texture.key !== 'enemy3' && (enemy.y > 600 || enemy.y < 0 || enemy.x > 800 || enemy.x < 0)) {
+                if (enemy.texture.key !== 'enemy3' && (enemy.y > this.scale.height || enemy.y < 0 || enemy.x > this.scale.width || enemy.x < 0)) {
                     if (enemy.texture.key === 'enemy2' && this.enemy2BounceBehavior && Math.random() < (this.enemy2BounceChance || 0.3)) {
                         // Check if enough time has passed since the last bounce
                         if (time - enemy.lastBounceTime >= 500) { // 500 ms cooldown
                             // Bounce logic for enemy 2
-                            if (enemy.y > 600 || enemy.y < 0) {
+                            if (enemy.y > this.scale.height || enemy.y < 0) {
                                 enemy.setVelocityY(-enemy.body.velocity.y);
                             }
-                            if (enemy.x > 800 || enemy.x < 0) {
+                            if (enemy.x > this.scale.width || enemy.x < 0) {
                                 enemy.setVelocityX(-enemy.body.velocity.x);
                             }
                             // Ensure the enemy stays within bounds
-                            enemy.x = Phaser.Math.Clamp(enemy.x, 0, 800);
-                            enemy.y = Phaser.Math.Clamp(enemy.y, 0, 600);
+                            enemy.x = Phaser.Math.Clamp(enemy.x, 0, this.scale.width);
+                            enemy.y = Phaser.Math.Clamp(enemy.y, 0, this.scale.height);
                             // Update the last bounce time
                             enemy.lastBounceTime = time;
                         }
@@ -793,7 +807,7 @@ class Example extends Phaser.Scene {
         this.physics.overlap(this.hero, this.powerUps, this.collectPowerUp, null, this);
         // Check if any power-ups have gone off-screen
         this.powerUps.getChildren().forEach((powerUp) => {
-            if (powerUp.y > 600) {
+            if (powerUp.y > this.scale.height) {
                 powerUp.destroy();
                 this.starsCollectedBeforeExpire = 0; // Reset the counter when a star goes off-screen
                 // Update perfectionist counter text
@@ -995,13 +1009,13 @@ class Example extends Phaser.Scene {
             this.playExplosionSound();
 
             this.time.delayedCall(1000, () => {
-                const overlay = this.add.rectangle(400, 300, 800, 600, 0x000000, 0.7);
+                const overlay = this.add.rectangle(this.scale.width / 2, this.scale.height / 2, this.scale.width, this.scale.height, 0x000000, 0.7);
                 overlay.setDepth(1000);
-                this.add.text(400, 300, 'Game Over', {
+                this.add.text(this.scale.width / 2, this.scale.height / 2, 'Game Over', {
                     fontSize: '64px',
                     fill: '#fff'
                 }).setOrigin(0.5).setDepth(1001);
-                this.add.text(400, 350, 'Pressione qualquer tecla para reiniciar', {
+                this.add.text(this.scale.width / 2, this.scale.height / 2 + 50, 'Pressione qualquer tecla para reiniciar', {
                     fontSize: '24px',
                     fill: '#fff'
                 }).setOrigin(0.5).setDepth(1001);
@@ -1060,8 +1074,10 @@ class Example extends Phaser.Scene {
         }
     }
     createEnemyThree() {
-        const screenWidth = this.sys.game.config.width;
-        const enemyThree = this.enemies.create(screenWidth / 2, -100, 'enemy3');
+        if (this.enemy3Destroyed) return;
+
+        const centerX = this.scale.width / 2;
+        const enemyThree = this.enemies.create(centerX, -100, 'enemy3');
         if (!enemyThree) {
             console.error('Failed to create enemy 3');
             return;
@@ -1263,8 +1279,8 @@ class Example extends Phaser.Scene {
     }
     // Second boss - Enemy Four (anemy01.gif)
     createEnemyFour() {
-        const screenWidth = this.sys.game.config.width;
-        const enemyFour = this.enemies.create(screenWidth / 2, -100, 'enemy4');
+        const centerX = this.scale.width / 2;
+        const enemyFour = this.enemies.create(centerX, -100, 'enemy4');
         if (!enemyFour) {
             console.error('Failed to create enemy 4');
             return;
@@ -1333,8 +1349,8 @@ class Example extends Phaser.Scene {
     }
     // Third boss - Enemy Five (anemy02.gif)
     createEnemyFive() {
-        const screenWidth = this.sys.game.config.width;
-        const enemyFive = this.enemies.create(screenWidth / 2, -120, 'enemy5');
+        const centerX = this.scale.width / 2;
+        const enemyFive = this.enemies.create(centerX, -120, 'enemy5');
         if (!enemyFive) {
             console.error('Failed to create enemy 5');
             return;
@@ -1359,7 +1375,6 @@ class Example extends Phaser.Scene {
                         if (enemyFive.active) {
                             angle += 0.05;
                             const radius = 100;
-                            const centerX = screenWidth / 2;
                             const centerY = 150;
                             enemyFive.x = centerX + Math.cos(angle) * radius;
                             enemyFive.y = centerY + Math.sin(angle) * radius * 0.5;
@@ -1473,12 +1488,12 @@ class Example extends Phaser.Scene {
                 this.enemy3Destroyed = false; // Reset for next boss
 
                 // Show level transition message
-                const levelText = this.add.text(400, 300, `Level ${this.currentLevel}!`, {
+                const levelText = this.add.text(this.scale.width / 2, this.scale.height / 2 - 30, `Level ${this.currentLevel}!`, {
                     fontSize: '64px',
                     fill: '#ffff00'
                 }).setOrigin(0.5).setDepth(1001);
 
-                this.add.text(400, 360, 'Novo Chefe Chegando!', {
+                this.add.text(this.scale.width / 2, this.scale.height / 2 + 30, 'Novo Chefe Chegando!', {
                     fontSize: '32px',
                     fill: '#fff'
                 }).setOrigin(0.5).setDepth(1001);
@@ -1502,32 +1517,32 @@ class Example extends Phaser.Scene {
                 loop: true,
                 volume: 0.7
             });
-            const overlay = this.add.rectangle(400, 300, 800, 600, 0x000000, 0.7);
+            const overlay = this.add.rectangle(this.scale.width / 2, this.scale.height / 2, this.scale.width, this.scale.height, 0x000000, 0.7);
             overlay.setDepth(1000);
-            this.add.text(400, 280, 'Você Venceu!', {
+            this.add.text(this.scale.width / 2, this.scale.height / 2 - 80, 'Você Venceu!', {
                 fontSize: '64px',
                 fill: '#fff'
             }).setOrigin(0.5).setDepth(1001);
-            this.add.text(400, 340, 'Todos os Chefes Derrotados!', {
+            this.add.text(this.scale.width / 2, this.scale.height / 2 - 20, 'Todos os Chefes Derrotados!', {
                 fontSize: '32px',
                 fill: '#00ff00'
             }).setOrigin(0.5).setDepth(1001);
-            this.add.text(400, 400, `Sua Pontuação: ${this.score}`, {
+            this.add.text(this.scale.width / 2, this.scale.height / 2 + 40, `Sua Pontuação: ${this.score}`, {
                 fontSize: '28px',
                 fill: '#fff'
             }).setOrigin(0.5).setDepth(1001);
             if (this.score < 15000) {
-                this.add.text(400, 450, 'Consegue superar 15.000 pontos?', {
+                this.add.text(this.scale.width / 2, this.scale.height / 2 + 90, 'Consegue superar 15.000 pontos?', {
                     fontSize: '24px',
                     fill: '#ffff00'
                 }).setOrigin(0.5).setDepth(1001);
             } else {
-                this.add.text(400, 450, 'Você superou 15.000 pontos!!', {
+                this.add.text(this.scale.width / 2, this.scale.height / 2 + 90, 'Você superou 15.000 pontos!!', {
                     fontSize: '24px',
                     fill: '#00ff00'
                 }).setOrigin(0.5).setDepth(1001);
             }
-            this.add.text(400, 500, 'Pressione qualquer tecla para reiniciar', {
+            this.add.text(this.scale.width / 2, this.scale.height / 2 + 140, 'Pressione qualquer tecla para reiniciar', {
                 fontSize: '24px',
                 fill: '#fff'
             }).setOrigin(0.5).setDepth(1001);
@@ -1802,24 +1817,28 @@ class Level4 extends Phaser.Scene {
         bullet.setTint(0xffff00);
     }
 }
+const isMobile = window.innerWidth < 800; // Check if screen width is less than desktop standard
+const gameConfigWidth = isMobile ? 540 : 800;
+const gameConfigHeight = isMobile ? 960 : 600;
+
 const config = {
     type: Phaser.AUTO,
-    width: 800,
-    height: 600,
+    width: gameConfigWidth,
+    height: gameConfigHeight,
     parent: 'game-container',
     backgroundColor: '#000000',
     scale: {
         mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH,
-        width: 800,
-        height: 600,
+        width: gameConfigWidth,
+        height: gameConfigHeight,
         min: {
-            width: 400,
-            height: 300
+            width: 270,
+            height: 480
         },
         max: {
-            width: 1600,
-            height: 1200
+            width: 1080,
+            height: 1920
         }
     },
     physics: {
@@ -1838,7 +1857,7 @@ class AchievementsScreen extends Phaser.Scene {
         super('AchievementsScreen');
     }
     create() {
-        this.add.rectangle(400, 300, 800, 600, 0x000000);
+        this.add.rectangle(this.scale.width / 2, this.scale.height / 2, this.scale.width, this.scale.height, 0x000000);
 
         const backButton = this.add.text(50, 40, 'Back', {
             fontSize: '24px',
@@ -1932,9 +1951,10 @@ class AchievementsScreen extends Phaser.Scene {
                 fontSize: '18px',
                 fill: color
             });
-            this.add.text(750, yPos, status, {
+            this.add.text(this.scale.width - 50, yPos, status, {
                 fontSize: '18px',
-                fill: color
+                fill: color,
+                wordWrap: { width: 100 }
             }).setOrigin(1, 0);
             yPos += 30;
         });
