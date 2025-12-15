@@ -2,16 +2,46 @@ class IntroScreen extends Phaser.Scene {
     constructor() {
         super('IntroScreen');
     }
+    preload() {
+        // Load intro music
+        this.load.audio('introMusic', 'assets/intro.mp3');
+    }
     create() {
+        // Stop any previous sounds and play intro music
+        this.sound.stopAll();
+        this.introMusic = this.sound.add('introMusic', {
+            loop: true,
+            volume: 0.7
+        });
+        this.introMusic.play();
+
+        // Get canvas dimensions for responsive positioning
+        const width = this.game.config.width;
+        const height = this.game.config.height;
+        const centerX = width / 2;
+        const isMobile = window.isMobile;
+
         // Add background
-        this.add.rectangle(400, 300, 800, 600, 0x000000);
-        // Add title
-        this.add.text(400, 100, 'Elleven Star Shooter', {
-            fontSize: '64px',
+        this.add.rectangle(centerX, height / 2, width, height, 0x000000);
+
+        // Add title - responsive font size
+        const titleSize = isMobile ? '48px' : '64px';
+        this.add.text(centerX, height * 0.12, 'Star Shooter', {
+            fontSize: titleSize,
             fill: '#ffffff'
         }).setOrigin(0.5);
-        // Add game instructions
-        const instructions = [
+
+        // Add game instructions - different for mobile vs desktop
+        const instructionSize = isMobile ? '18px' : '24px';
+        const instructions = isMobile ? [
+            'Como Jogar:',
+            '- Toque e arraste para mover a nave',
+            '- O tiro é automático enquanto toca',
+            '- Derrote o Chefe para vencer',
+            '- Colete estrelas para melhorar sua arma',
+            '',
+            'Toque na tela para iniciar o jogo'
+        ] : [
             'Como Jogar:',
             '- Use as setas ou WASD para se mover',
             '- Derrote o Chefe para vencer',
@@ -21,34 +51,50 @@ class IntroScreen extends Phaser.Scene {
             'Pressione Qualquer Tecla para iniciar o jogo'
         ];
 
-        let yPosition = 200;
+        let yPosition = height * 0.25;
+        const lineSpacing = isMobile ? 32 : 40;
         instructions.forEach(line => {
-            this.add.text(400, yPosition, line, {
-                fontSize: '24px',
+            this.add.text(centerX, yPosition, line, {
+                fontSize: instructionSize,
                 fill: '#ffffff'
             }).setOrigin(0.5);
-            yPosition += 40;
+            yPosition += lineSpacing;
         });
 
         // Add achievements button below the instructions
-        const achievementsButton = this.add.text(400, yPosition + 20, 'Clique aqui para ver as conquistas', {
-            fontSize: '24px',
+        const buttonSize = isMobile ? '18px' : '24px';
+        const achievementsButton = this.add.text(centerX, yPosition + 20, 'Clique aqui para ver as conquistas', {
+            fontSize: buttonSize,
             fill: '#ffffff'
         }).setOrigin(0.5).setInteractive();
         achievementsButton.on('pointerdown', () => {
+            this.introMusic.stop();
             this.scene.start('AchievementsScreen');
         });
-        // Add key listener for any key to start the game
-        this.input.keyboard.once('keydown', (event) => {
-            // Prevent the space key from starting the game twice
-            if (event.key !== ' ') {
+
+        // Mobile: tap anywhere (except achievements button) to start
+        if (isMobile) {
+            this.input.on('pointerdown', (pointer) => {
+                // Check if the tap was on the achievements button area
+                const buttonBounds = achievementsButton.getBounds();
+                if (!buttonBounds.contains(pointer.x, pointer.y)) {
+                    this.introMusic.stop();
+                    this.scene.start('Example');
+                }
+            });
+        } else {
+            // Desktop: keyboard to start
+            this.input.keyboard.once('keydown', (event) => {
+                if (event.key !== ' ') {
+                    this.introMusic.stop();
+                    this.scene.start('Example');
+                }
+            });
+            this.input.keyboard.once('keydown-SPACE', () => {
+                this.introMusic.stop();
                 this.scene.start('Example');
-            }
-        });
-        // Add specific listener for the space key
-        this.input.keyboard.once('keydown-SPACE', () => {
-            this.scene.start('Example');
-        });
+            });
+        }
     }
 }
 class Example extends Phaser.Scene {
@@ -74,12 +120,12 @@ class Example extends Phaser.Scene {
         this.enemy2AlwaysBounce = false; // New property to track if enemy 2 should always bounce
         this.spawnEnemy2OnEnemy1Destruction = false; // New property to track if we should spawn enemy 2 on enemy 1 destruction
         this.doubleEnemy2Spawn = false; // New property to track if we should spawn two enemy 2 on enemy 1 destruction
-        this.enemy3Destroyed = false; // New flag to track if enemy 3 has been destroyed
+        this.boss1Destroyed = false; // New flag to track if enemy 3 has been destroyed
         this.gameWon = false; // New flag to track if the game has been won
         this.starCounter = 0; // New property to track the number of stars collected
         this.starIcons = []; // New property to store the star icon sprites
         this.enemy2SpawnedCount = 0; // New property to track the number of enemy2 spawned from enemy1
-        this.enemy3Destroyed = false; // New flag to track if enemy 3 has been destroyed
+        this.boss1Destroyed = false; // New flag to track if enemy 3 has been destroyed
         this.playerHit = false; // New property to track if the player has been hit
         this.weaponUpgraded = false; // New property to track if the player has received any weapon upgrades
         this.upgradeDuringBossFight = false; // New property to track if an upgrade was acquired during boss fight
@@ -107,19 +153,57 @@ class Example extends Phaser.Scene {
             fontSize: '24px',
             fill: '#fff'
         });
-        // Add mouse control
-        this.input.on('pointermove', (pointer) => {
-            if (this.hero && this.hero.active) {
-                this.hero.x = Phaser.Math.Clamp(pointer.x, 0, this.game.config.width);
-            }
-        });
 
-        // Add click to restart
-        this.input.on('pointerdown', () => {
-            if (this.gameOver) {
-                this.scene.restart();
-            }
-        });
+        // ============================================
+        // MOBILE TOUCH CONTROLS
+        // ============================================
+        if (window.isMobile) {
+            // Track if player is touching the screen
+            this.isTouching = false;
+
+            // Touch start - begin tracking and auto-fire
+            this.input.on('pointerdown', (pointer) => {
+                if (this.gameOver) {
+                    this.scene.restart();
+                    return;
+                }
+                this.isTouching = true;
+                // Move hero to touch position
+                if (this.hero && this.hero.active) {
+                    this.hero.x = Phaser.Math.Clamp(pointer.x, 40, this.game.config.width - 40);
+                    this.hero.y = Phaser.Math.Clamp(pointer.y, this.game.config.height * 0.3, this.game.config.height - 40);
+                }
+            });
+
+            // Touch move - hero follows finger
+            this.input.on('pointermove', (pointer) => {
+                if (this.hero && this.hero.active && pointer.isDown) {
+                    this.hero.x = Phaser.Math.Clamp(pointer.x, 40, this.game.config.width - 40);
+                    this.hero.y = Phaser.Math.Clamp(pointer.y, this.game.config.height * 0.3, this.game.config.height - 40);
+                }
+            });
+
+            // Touch end - stop auto-fire
+            this.input.on('pointerup', () => {
+                this.isTouching = false;
+            });
+        } else {
+            // ============================================
+            // DESKTOP MOUSE CONTROLS (unchanged)
+            // ============================================
+            this.input.on('pointermove', (pointer) => {
+                if (this.hero && this.hero.active) {
+                    this.hero.x = Phaser.Math.Clamp(pointer.x, 0, this.game.config.width);
+                }
+            });
+
+            // Add click to restart
+            this.input.on('pointerdown', () => {
+                if (this.gameOver) {
+                    this.scene.restart();
+                }
+            });
+        }
     }
     initTotalKillCount() {
         let totalKills = localStorage.getItem('totalEnemyKills');
@@ -136,63 +220,230 @@ class Example extends Phaser.Scene {
         return totalKills;
     }
     preload() {
-        this.load.image('hero', 'assets/hero.png');
+        // Load hero spritesheet (4x4 grid, 80x80 per frame)
+        this.load.spritesheet('hero', 'assets/spaceship_spritesheet.png', {
+            frameWidth: 80,
+            frameHeight: 80
+        });
+        this.load.image('max_hero', 'assets/max_hero.gif');
         this.load.image('Cannon_bullet', 'assets/cannom_bullet.png');
         this.load.image('enemy1', 'assets/enemy1.png');
         this.load.image('enemy2', 'assets/enemy2.png');
-        this.load.image('enemy3', 'assets/enemy3.png');
+        this.load.image('enemy3', 'assets/enemy3.png'); // Sub-chief enemy (appears from level 2)
+        this.load.image('boss1', 'assets/boss1.png');
         this.load.image('background', 'assets/background.jpg');
+        this.load.image('background2', 'assets/background02.jpg');
+        this.load.image('background3', 'assets/background03.jpg');
         this.load.image('star', 'assets/bitcoin.png');
         // New assets for coins and life
         this.load.image('coin1', 'assets/coin1.png');
         this.load.image('coin2', 'assets/coin2.png');
         this.load.image('coin3', 'assets/coin3.png');
         this.load.image('life', 'assets/life.png');
-        // New boss sprites (GIF as sprite)
-        this.load.image('enemy4', 'assets/anemy01.gif');
-        this.load.image('enemy5', 'assets/anemy02.gif');
-        this.load.audio('backgroundMusic', 'assets/goa.mp3');
+        // Boss sprites for all 8 levels
+        this.load.image('boss2', 'assets/boss2.png');
+        this.load.image('boss3', 'assets/boss3.png');
+        this.load.image('boss4', 'assets/boss4.png');
+        this.load.image('boss5', 'assets/boss5.png');
+        this.load.image('boss6', 'assets/boss6.png');
+        this.load.image('boss7', 'assets/boss7.png');
+        this.load.image('boss8', 'assets/boss8.png');
+        // Final boss spritesheet (4x4 grid, 160x160 per frame)
+        this.load.spritesheet('finalboss', 'assets/finalboss_spritesheet.png', {
+            frameWidth: 160,
+            frameHeight: 160
+        });
+        // Level-based background music
+        this.load.audio('level1-3Music', 'assets/level1-3.mp3');
+        this.load.audio('level4-6Music', 'assets/level4-6.mp3');
+        this.load.audio('level7-8Music', 'assets/level7-8.mp3');
+        this.load.audio('finalLevelMusic', 'assets/finallevel.mp3');
+        this.load.audio('finalBossMusic', 'assets/finalboss.mp3');
         this.load.audio('boomSound', 'assets/boom.mp3');
         this.load.audio('hitSound', 'assets/hit.mp3');
         this.load.audio('shieldSound', 'assets/shield.mp3');
         this.load.audio('bellSound', 'assets/bell.mp3');
         this.load.audio('lowBellSound', 'assets/low_bell.mp3');
         this.load.audio('alarmSound', 'assets/alarm.mp3');
-        this.load.audio('brassBandMusic', 'assets/BrassBand.mp3');
+        this.load.audio('finalyMusic', 'assets/finaly.mp3');
         this.load.audio('cashSound', 'assets/cash_10.mp3');
+        this.load.audio('lifeSound', 'assets/life.mp3');
     }
     create() {
+        // Reset UI elements that need to be recreated on scene restart
+        this.weaponPowerText = null;
+        this.starIcons = null; // Reset star icons array
+
         // Reset game state variables on scene start/restart
         this.gameOver = false;
         this.heroDestroyed = false;
         this.gameWon = false;
-        this.enemy3Destroyed = false;
-        this.playerLives = 0;
-        this.currentLevel = 1;
-        this.score = 0;
+        this.boss1Destroyed = false;
+
+        // Check if this is a level progression (coming from previous level)
+        const isLevelProgression = this.registry.get('levelProgression');
+
+        if (isLevelProgression) {
+            // Restore preserved state from previous level
+            this.currentLevel = this.registry.get('currentLevel') || 1;
+            this.score = this.registry.get('preservedScore') || 0;
+            this.playerLives = this.registry.get('preservedLives') || 0;
+            this.starCounter = this.registry.get('preservedStarCounter') || 0;
+            this.preservedWeaponPower = this.registry.get('preservedWeaponPower') || 1;
+            const preservedTransformed = this.registry.get('preservedTransformed') || false;
+
+            // Clear the flag
+            this.registry.set('levelProgression', false);
+
+            this.heroTransformed = preservedTransformed;
+        } else {
+            // Fresh game start
+            this.playerLives = 0;
+            this.currentLevel = 1;
+            this.score = 0;
+            this.starCounter = 0;
+            this.heroTransformed = false;
+        }
+
         this.enemyKillCount = 0;
-        this.starCounter = 0;
 
         // Set the game start time
         this.gameStartTime = this.time.now;
         // Initialize lastKillTime at the start of the game
         this.lastKillTime = this.time.now;
-        // Create a tiling sprite for the scrolling background
-        this.background = this.add.tileSprite(400, 300, 800, 600, 'background')
+
+        // ============================================
+        // BACKGROUND CONFIGURATION
+        // Levels 1-3: background.jpg (left, center, right positions)
+        // Levels 4-6: background02.jpg (left, center, right positions)
+        // Levels 7-8: background03.jpg (left, center positions)
+        // ============================================
+        const BACKGROUND_CONFIG = {
+            1: { image: 'background', offsetX: 0 },      // Left section
+            2: { image: 'background', offsetX: 400 },    // Center section
+            3: { image: 'background', offsetX: 800 },    // Right section
+            4: { image: 'background2', offsetX: 0 },      // Left section
+            5: { image: 'background2', offsetX: 400 },    // Center section
+            6: { image: 'background2', offsetX: 800 },    // Right section
+            7: { image: 'background3', offsetX: 0 },      // Left section
+            8: { image: 'background3', offsetX: 400 },    // Center section
+            9: { image: 'background3', offsetX: 800 }     // Right section - Final Level
+        };
+
+        // Get canvas dimensions for positioning
+        const gameWidth = this.game.config.width;
+        const gameHeight = this.game.config.height;
+        const centerX = gameWidth / 2;
+        const centerY = gameHeight / 2;
+
+        const bgConfig = BACKGROUND_CONFIG[this.currentLevel] || BACKGROUND_CONFIG[1];
+        this.background = this.add.tileSprite(centerX, centerY, gameWidth, gameHeight, bgConfig.image)
             .setOrigin(0.5)
-            .setAlpha(0.3);
+            .setAlpha(0.4);
+        // Set initial X offset to show different part of the background
+        this.background.tilePositionX = bgConfig.offsetX;
+        // ============================================
+
         // Initialize enemy kill counter
         this.enemyKillCount = 0;
         // Add the hero sprite to the scene
         // Create a white shield underneath the hero
-        this.shield = this.add.circle(400, 300, 28, 0xffffff);
+        this.shield = this.add.circle(centerX, centerY, 28, 0xffffff);
         this.shield.setDepth(0); // Set the depth to 0 to ensure it's drawn underneath
+
+        // ============================================
+        // HERO SPRITESHEET ANIMATIONS
+        // 4x4 grid (16 frames total, 80x80 each)
+        // Row 1 (frames 0-3): Idle/default state
+        // Row 2 (frames 4-7): Light thrust (moving down)
+        // Row 3 (frames 8-11): Medium thrust (stationary)
+        // Row 4 (frames 12-15): Maximum thrust (moving up)
+        // ============================================
+
+        // Create hero animations if they don't exist
+        if (!this.anims.exists('hero_idle')) {
+            this.anims.create({
+                key: 'hero_idle',
+                frames: this.anims.generateFrameNumbers('hero', { start: 0, end: 3 }),
+                frameRate: 8,
+                repeat: -1
+            });
+        }
+
+        if (!this.anims.exists('hero_thrust_light')) {
+            this.anims.create({
+                key: 'hero_thrust_light',
+                frames: this.anims.generateFrameNumbers('hero', { start: 4, end: 7 }),
+                frameRate: 10,
+                repeat: -1
+            });
+        }
+
+        if (!this.anims.exists('hero_thrust_medium')) {
+            this.anims.create({
+                key: 'hero_thrust_medium',
+                frames: this.anims.generateFrameNumbers('hero', { start: 8, end: 11 }),
+                frameRate: 12,
+                repeat: -1
+            });
+        }
+
+        if (!this.anims.exists('hero_thrust_max')) {
+            this.anims.create({
+                key: 'hero_thrust_max',
+                frames: this.anims.generateFrameNumbers('hero', { start: 12, end: 15 }),
+                frameRate: 14,
+                repeat: -1
+            });
+        }
+
+        // ============================================
+        // FINAL BOSS SPRITESHEET ANIMATIONS
+        // 4x4 grid (16 frames total, 160x160 each)
+        // Rows 1-2 (frames 0-7): Ship facing down (towards player)
+        // Rows 3-4 (frames 8-15): Ship facing up (away from player)
+        // For the boss, we use rows 1-2 as they face the player
+        // ============================================
+        if (!this.anims.exists('finalboss_idle')) {
+            this.anims.create({
+                key: 'finalboss_idle',
+                frames: this.anims.generateFrameNumbers('finalboss', { start: 0, end: 3 }),
+                frameRate: 8,
+                repeat: -1
+            });
+        }
+
+        if (!this.anims.exists('finalboss_thrust')) {
+            this.anims.create({
+                key: 'finalboss_thrust',
+                frames: this.anims.generateFrameNumbers('finalboss', { start: 4, end: 7 }),
+                frameRate: 10,
+                repeat: -1
+            });
+        }
+
         // Add the hero sprite to the scene
-        this.hero = this.physics.add.sprite(400, 300, 'hero');
+        // Position hero in lower third of screen for mobile, center for desktop
+        const heroStartY = window.isMobile ? gameHeight * 0.75 : centerY;
+        this.hero = this.physics.add.sprite(centerX, heroStartY, 'hero');
         this.hero.setCollideWorldBounds(true);
         this.hero.setDepth(1); // Set the depth to 1 to ensure it's drawn above the shield
-        this.hero.weaponPower = 1; // Initialize weapon power to 1
-        this.hero.shotsFired = 0; // Initialize shot counter
+        this.hero.setScale(0.8); // Adjust scale for proper size (80x80 * 0.8 = 64x64)
+
+        // Start with idle animation
+        this.hero.play('hero_thrust_medium');
+
+        // Initialize or restore weapon power
+        if (isLevelProgression) {
+            this.hero.weaponPower = this.preservedWeaponPower;
+
+            // NOTE: max_hero transformation disabled - always use spritesheet
+            // The heroTransformed flag is no longer used for texture changes
+        } else {
+            this.hero.weaponPower = 1; // Initialize weapon power to 1
+        }
+
+        this.hero.shotsFired = 0; // Always reset shot counter
         // Create cursor keys
         this.cursors = this.input.keyboard.createCursorKeys();
         this.wasdKeys = this.input.keyboard.addKeys('W,A,S,D');
@@ -204,15 +455,56 @@ class Example extends Phaser.Scene {
                 console.log(`Permanent invulnerability ${this.permanentInvulnerability ? 'activated' : 'deactivated'}`);
             }
         });
+
+        // ============================================
+        // TEMPORARY: Level change shortcuts for testing
+        // Press - to go to previous level, + to go to next level
+        // TODO: Remove this block before production release
+        // ============================================
+        this.input.keyboard.on('keydown-MINUS', () => {
+            if (this.currentLevel > 1) {
+                this.registry.set('currentLevel', this.currentLevel - 1);
+                this.registry.set('preservedScore', this.score);
+                this.registry.set('preservedWeaponPower', this.hero.weaponPower);
+                this.registry.set('preservedLives', this.playerLives);
+                this.registry.set('preservedStarCounter', this.starCounter);
+                this.registry.set('preservedTransformed', this.heroTransformed);
+                this.registry.set('levelProgression', true);
+                console.log(`DEBUG: Changing to level ${this.currentLevel - 1}`);
+                this.scene.restart();
+            } else {
+                console.log('DEBUG: Already at level 1');
+            }
+        });
+        this.input.keyboard.on('keydown-PLUS', () => {
+            if (this.currentLevel < 9) {
+                this.registry.set('currentLevel', this.currentLevel + 1);
+                this.registry.set('preservedScore', this.score);
+                this.registry.set('preservedWeaponPower', this.hero.weaponPower);
+                this.registry.set('preservedLives', this.playerLives);
+                this.registry.set('preservedStarCounter', this.starCounter);
+                this.registry.set('preservedTransformed', this.heroTransformed);
+                this.registry.set('levelProgression', true);
+                console.log(`DEBUG: Changing to level ${this.currentLevel + 1}`);
+                this.scene.restart();
+            } else {
+                console.log('DEBUG: Already at max level (9)');
+            }
+        });
+        // ============================================
+        // END TEMPORARY BLOCK
+        // ============================================
+
         // Create player bullets group
         this.playerBullets = this.physics.add.group();
         // Create enemy group
         this.enemies = this.physics.add.group();
         // Create an instance of enemy 1
         this.createEnemyOne();
-        // Add score text
+        // Add score text - responsive font size
+        const uiFontSize = window.isMobile ? '20px' : '32px';
         this.scoreText = this.add.text(16, 16, 'Score: 0', {
-            fontSize: '32px',
+            fontSize: uiFontSize,
             fill: '#fff'
         });
         // Create enemy 2 after 2 seconds
@@ -305,6 +597,21 @@ class Example extends Phaser.Scene {
                 loop: true
             });
         }, [], this);
+
+        // ============================================
+        // ENEMY3 SPAWN TIMER (Regular enemy - less frequent)
+        // Spawns every 8 seconds, starting 40 seconds into the level
+        // ============================================
+        this.time.delayedCall(40000, () => {
+            this.time.addEvent({
+                delay: 8000, // Every 8 seconds (less frequent than enemy2's 3 seconds)
+                callback: this.createEnemyThreeRegular,
+                callbackScope: this,
+                loop: true
+            });
+        }, [], this);
+        // ============================================
+
         // After 75 seconds, enemy 2 will bounce 50% of the time after reaching the edge of the screen
         this.time.delayedCall(75000, () => {
             this.enemy2BounceBehavior = true;
@@ -319,9 +626,85 @@ class Example extends Phaser.Scene {
         this.time.delayedCall(80000, () => {
             this.doubleEnemy2Spawn = true;
         }, [], this);
-        // Create a single enemy 3 (boss) after 150 seconds
-        this.time.delayedCall(150000, this.createEnemyThree, [], this);
+        // Create main boss - 150s for normal levels, 300s for Level 9 (final level)
+        const bossSpawnTime = this.currentLevel === 9 ? 5000 : 150000;
+        this.time.delayedCall(bossSpawnTime, this.createEnemyThree, [], this);
+
+        // ============================================
+        // LEVEL 9 TRANSITION EFFECTS
+        // Gradual screen darkening + music change before final boss
+        // ============================================
+        if (this.currentLevel === 9) {
+            // 30 seconds before boss, start transition
+            const transitionTime = bossSpawnTime - 30000;
+            this.time.delayedCall(transitionTime, () => {
+                // Create darkening overlay - dynamic dimensions
+                const gw = this.game.config.width;
+                const gh = this.game.config.height;
+                this.finalBossOverlay = this.add.rectangle(gw / 2, gh / 2, gw, gh, 0x000000, 0);
+                this.finalBossOverlay.setDepth(999);
+
+                // Gradual darkening over 15 seconds
+                this.tweens.add({
+                    targets: this.finalBossOverlay,
+                    alpha: 0.35,
+                    duration: 15000,
+                    ease: 'Power1'
+                });
+
+                // 15 seconds before boss, change music
+                this.time.delayedCall(15000, () => {
+                    // Fade out current music
+                    this.tweens.add({
+                        targets: this.backgroundMusic,
+                        volume: 0,
+                        duration: 2000,
+                        onComplete: () => {
+                            this.backgroundMusic.stop();
+                            // Start final boss music
+                            this.finalBossMusic = this.sound.add('finalBossMusic', {
+                                loop: true,
+                                volume: 0
+                            });
+                            this.finalBossMusic.play();
+                            // Fade in new music
+                            this.tweens.add({
+                                targets: this.finalBossMusic,
+                                volume: 0.8,
+                                duration: 3000
+                            });
+                        }
+                    });
+                }, [], this);
+            }, [], this);
+        }
+
+        // ============================================
+        // SUB-BOSS SPAWN TIMER (Level 2+ only)
+        // Uses previous level's boss sprite with its attack patterns
+        // Spawns rarely, starting 100 seconds into the level
+        // ============================================
+        if (this.currentLevel >= 2) {
+            // First sub-boss appears at 100 seconds
+            this.time.delayedCall(100000, () => {
+                this.createMiniBoss();
+            }, [], this);
+
+            // Then every 45 seconds (rare appearance)
+            this.time.delayedCall(100000, () => {
+                this.time.addEvent({
+                    delay: 50000, // Every 50 seconds
+                    callback: this.createMiniBoss,
+                    callbackScope: this,
+                    loop: false
+                });
+            }, [], this);
+        }
+        // ============================================
+
         // After 100 seconds, double enemy 1's firing rate
+
+
         this.time.delayedCall(100000, () => {
             this.enemy1FireRateMultiplier = 2;
         }, [], this);
@@ -345,45 +728,174 @@ class Example extends Phaser.Scene {
         this.powerUps = this.physics.add.group();
         // Initialize the weapon power display
         this.updateWeaponPowerDisplay();
-        // Add background music
-        this.backgroundMusic = this.sound.add('backgroundMusic', {
+        // Add level-based background music
+        // Levels 1-3: level1-3.mp3
+        // Levels 4-6: level4-6.mp3
+        // Levels 7-8: level7-8.mp3
+        // Level 9: finallevel.mp3 (final level)
+        let musicKey;
+        if (this.currentLevel >= 1 && this.currentLevel <= 3) {
+            musicKey = 'level1-3Music';
+        } else if (this.currentLevel >= 4 && this.currentLevel <= 6) {
+            musicKey = 'level4-6Music';
+        } else if (this.currentLevel >= 7 && this.currentLevel <= 8) {
+            musicKey = 'level7-8Music';
+        } else if (this.currentLevel === 9) {
+            musicKey = 'finalLevelMusic';
+        } else {
+            musicKey = 'level7-8Music';
+        }
+
+        // Stop any previous music before starting new one
+        this.sound.stopAll();
+        this.backgroundMusic = this.sound.add(musicKey, {
             loop: true,
             volume: 0.7
         });
         this.backgroundMusic.play();
-        // Initialize star icons
-        for (let i = 0; i < 6; i++) {
-            const starIcon = this.add.image(30, 100 + i * 40, 'star').setScale(0.3);
-            starIcon.setAlpha(0.3); // Set initial opacity to 30%
-            this.starIcons.push(starIcon);
+        // Initialize or recreate star icons - responsive positioning
+        const starStartY = window.isMobile ? 90 : 100;
+        const starSpacing = window.isMobile ? 30 : 40;
+        if (!this.starIcons) {
+            this.starIcons = [];
+            for (let i = 0; i < 6; i++) {
+                const starIcon = this.add.image(20, starStartY + i * starSpacing, 'star').setScale(window.isMobile ? 0.22 : 0.3);
+                starIcon.setAlpha(0.3); // Set initial opacity to 30%
+                this.starIcons.push(starIcon);
+            }
         }
         // Add invisible game timer
         this.gameTimer = 0;
-        this.gameTimerText = this.add.text(780, 580, '0:00', {
-            fontSize: '24px',
+        this.gameTimerText = this.add.text(this.game.config.width - 20, this.game.config.height - 20, '0:00', {
+            fontSize: window.isMobile ? '18px' : '24px',
             fill: '#ffffff'
         });
         this.gameTimerText.setOrigin(1, 1);
         this.gameTimerText.setAlpha(0); // Make the timer invisible
 
-        // Add lives display
-        this.livesIcon = this.add.image(760, 16, 'life').setScale(0.4);
+        // Add lives display - responsive positioning
+        const livesX = this.game.config.width - (window.isMobile ? 50 : 65);
+        this.livesIcon = this.add.image(livesX, 16, 'life').setScale(window.isMobile ? 0.3 : 0.4);
         this.livesIcon.setOrigin(1, 0);
-        this.livesText = this.add.text(770, 16, 'x' + this.playerLives, {
-            fontSize: '24px',
+        this.livesText = this.add.text(livesX + 5, 16, 'x' + this.playerLives, {
+            fontSize: window.isMobile ? '18px' : '24px',
             fill: '#ff6666'
         }).setOrigin(0, 0);
 
+        // Add level indicator - centered
+        this.levelText = this.add.text(this.game.config.width / 2, 16, `Level ${this.currentLevel}`, {
+            fontSize: window.isMobile ? '20px' : '28px',
+            fill: '#ffff00',
+            fontStyle: 'bold'
+        }).setOrigin(0.5, 0);
+
     }
+
+    getDifficultyMultiplier() {
+        // Returns progressive difficulty multiplier based on current level
+        // Using 10% increase per level for balanced difficulty across 8 levels
+        // Level 1: 1.0x, Level 2: 1.1x, Level 3: 1.21x, ..., Level 8: ~1.95x
+        return Math.pow(1.10, this.currentLevel - 1);
+    }
+
     createExplosion(x, y, enemyType) {
         const explosion = this.add.group();
-        const particleCount = enemyType === 'enemy3' ? 60 : 20; // Triple particles for enemy 3
-        const particleSizeMin = enemyType === 'enemy3' ? 9 : 3; // Triple min size for enemy 3
-        const particleSizeMax = enemyType === 'enemy3' ? 24 : 8; // Triple max size for enemy 3
-        const spreadArea = enemyType === 'enemy3' ? 300 : 100; // Triple spread area for enemy 3
-        const duration = enemyType === 'enemy3' ? 2400 : 800; // Triple duration for enemy 3
+
+        // Progressive particle effects based on enemy type
+        let particleCount, particleSizeMin, particleSizeMax, spreadArea, duration, color;
+
+        if (enemyType === 'boss1') {
+            // Level 1 boss - red
+            particleCount = 60;
+            particleSizeMin = 9;
+            particleSizeMax = 24;
+            spreadArea = 300;
+            duration = 2400;
+            color = 0xff0000; // Red
+        } else if (enemyType === 'boss2') {
+            // Level 2 boss - orange
+            particleCount = 65;
+            particleSizeMin = 10;
+            particleSizeMax = 26;
+            spreadArea = 320;
+            duration = 2600;
+            color = 0xff6600; // Orange
+        } else if (enemyType === 'boss3') {
+            // Level 3 boss - yellow
+            particleCount = 70;
+            particleSizeMin = 11;
+            particleSizeMax = 28;
+            spreadArea = 340;
+            duration = 2800;
+            color = 0xffff00; // Yellow
+        } else if (enemyType === 'boss4') {
+            // Level 4 boss - green
+            particleCount = 75;
+            particleSizeMin = 12;
+            particleSizeMax = 30;
+            spreadArea = 360;
+            duration = 3000;
+            color = 0x00ff00; // Green
+        } else if (enemyType === 'boss5') {
+            // Level 5 boss - cyan
+            particleCount = 80;
+            particleSizeMin = 13;
+            particleSizeMax = 32;
+            spreadArea = 380;
+            duration = 3200;
+            color = 0x00ffff; // Cyan
+        } else if (enemyType === 'boss6') {
+            // Level 6 boss - blue
+            particleCount = 85;
+            particleSizeMin = 14;
+            particleSizeMax = 34;
+            spreadArea = 400;
+            duration = 3400;
+            color = 0x0066ff; // Blue
+        } else if (enemyType === 'boss7') {
+            // Level 7 boss - purple
+            particleCount = 90;
+            particleSizeMin = 15;
+            particleSizeMax = 36;
+            spreadArea = 420;
+            duration = 3600;
+            color = 0x9900ff; // Purple
+        } else if (enemyType === 'boss8') {
+            // Level 8 boss - magenta (epic final boss)
+            particleCount = 100;
+            particleSizeMin = 16;
+            particleSizeMax = 40;
+            spreadArea = 500;
+            duration = 4000;
+            color = 0xff00ff; // Magenta
+        } else if (enemyType === 'finalboss') {
+            // Level 9 FINAL BOSS - Epic gold/white explosion
+            particleCount = 200;
+            particleSizeMin = 20;
+            particleSizeMax = 50;
+            spreadArea = 700;
+            duration = 6000;
+            color = 0xffd700; // Gold
+        } else if (enemyType === 'enemy3') {
+            // Mini-boss - cyan explosion
+            particleCount = 40;
+            particleSizeMin = 6;
+            particleSizeMax = 16;
+            spreadArea = 200;
+            duration = 1600;
+            color = 0x00ffff; // Cyan
+        } else {
+            // Regular enemies
+            particleCount = 20;
+            particleSizeMin = 3;
+            particleSizeMax = 8;
+            spreadArea = 100;
+            duration = 800;
+            color = 0xff0000; // Red
+        }
+
         for (let i = 0; i < particleCount; i++) {
-            const particle = this.add.circle(x, y, Phaser.Math.Between(particleSizeMin, particleSizeMax), 0xff0000);
+            const particle = this.add.circle(x, y, Phaser.Math.Between(particleSizeMin, particleSizeMax), color);
             explosion.add(particle);
             this.tweens.add({
                 targets: particle,
@@ -398,15 +910,30 @@ class Example extends Phaser.Scene {
             });
         }
     }
+
+    // Helper function to check if an enemy is a boss
+    isBossEnemy(enemy) {
+        if (!enemy || !enemy.texture) return false;
+        const bossKeys = ['boss1', 'boss2', 'boss3', 'boss4', 'boss5', 'boss6', 'boss7', 'boss8', 'finalboss'];
+        return bossKeys.includes(enemy.texture.key);
+    }
+
     createEnemyOne() {
         const enemy1Count = this.enemies.getChildren().filter(enemy => enemy.texture.key === 'enemy1').length;
-        if (enemy1Count < 15 && !this.enemy3Destroyed) {
+        if (enemy1Count < 15 && !this.boss1Destroyed) {
+            const difficulty = this.getDifficultyMultiplier();
             const enemyOne = this.enemies.create(Phaser.Math.Between(0, 800), 0, 'enemy1');
-            enemyOne.setScale(0.3); // Set the scale to 50% of original size
-            enemyOne.setVelocityY(100);
+            enemyOne.setScale(0.3); // Restored original scale
+
+            // Apply difficulty scaling to speed
+            const baseSpeed = 100;
+            enemyOne.setVelocityY(baseSpeed * difficulty);
+
             // Add random horizontal movement (drift left/right)
             enemyOne.setVelocityX(Phaser.Math.Between(-50, 50));
-            enemyOne.health = 5; // Set the health value of the enemy to 5
+            // Apply difficulty scaling to health - base 5 HP
+            const baseHealth = 5;
+            enemyOne.health = Math.floor(baseHealth * difficulty);
             enemyOne.originalX = enemyOne.x; // Store original X for reference
 
             // Add periodic direction change for more organic movement
@@ -436,15 +963,22 @@ class Example extends Phaser.Scene {
         }
     }
     createEnemyTwo(x = null, y = null) {
-        if (!this.enemy3Destroyed) {
+        if (!this.boss1Destroyed) {
+            const difficulty = this.getDifficultyMultiplier();
             const enemyTwo = this.enemies.create(x || Phaser.Math.Between(0, 800), y || 0, 'enemy2');
             enemyTwo.setScale(0.2); // Set the scale to 20% of original size
-            enemyTwo.setVelocityY(150 * this.enemy2SpeedMultiplier); // Apply speed multiplier
+
+            // Apply difficulty scaling to speed
+            const baseSpeed = this.enemy2SpeedMultiplier ? 140 : 70;
+            enemyTwo.setVelocityY(baseSpeed * difficulty);
+
             if (this.applyHorizontalVelocity) {
-                const horizontalVelocity = Phaser.Math.Between(-100, 100) * this.enemy2SpeedMultiplier;
+                const horizontalVelocity = Phaser.Math.Between(-100, 100) * difficulty;
                 enemyTwo.setVelocityX(horizontalVelocity);
             }
-            enemyTwo.health = 2; // Changed health from 7 to 2
+
+            // Apply difficulty scaling to health (minimum 1)
+            enemyTwo.health = Math.max(1, Math.floor(2 * difficulty));
             enemyTwo.lastBounceTime = 0; // Add a property to track the last bounce time
             // Make the enemy invincible for a quarter of a second if it's created from an enemy 1 death
             if (x !== null && y !== null) {
@@ -457,6 +991,295 @@ class Example extends Phaser.Scene {
             }
         }
     }
+
+    // ============================================
+    // ENEMY3 - Regular enemy (more resistant than enemy2)
+    // Appears from early game but with lower frequency
+    // Double the resistance of enemy2
+    // ============================================
+    createEnemyThreeRegular() {
+        const enemy3Count = this.enemies.getChildren().filter(enemy => enemy.texture.key === 'enemy3' && enemy.isRegularEnemy3).length;
+        if (enemy3Count < 5 && !this.boss1Destroyed) { // Max 5 enemy3 on screen
+            const difficulty = this.getDifficultyMultiplier();
+            const enemyThree = this.enemies.create(Phaser.Math.Between(0, 800), 0, 'enemy3');
+            enemyThree.setScale(0.5); // Slightly larger than enemy2 (0.2)
+
+            // Speed similar to enemy2
+            const baseSpeed = 80;
+            enemyThree.setVelocityY(baseSpeed * difficulty);
+            enemyThree.setVelocityX(Phaser.Math.Between(-50, 50));
+
+            // Double the health of enemy2 (enemy2 base = 2, enemy3 base = 4)
+            enemyThree.health = Math.max(2, Math.floor(4 * difficulty));
+            enemyThree.isRegularEnemy3 = true; // Flag to identify as regular enemy (not sub-boss)
+
+            // Random horizontal direction changes
+            this.time.addEvent({
+                delay: Phaser.Math.Between(1500, 4000),
+                callback: () => {
+                    if (enemyThree.active) {
+                        enemyThree.setVelocityX(Phaser.Math.Between(-70, 70));
+                    }
+                },
+                loop: true
+            });
+
+            // ============================================
+            // ENEMY3 FIRING - Aimed shots at player
+            // Fires every 2-3 seconds with 3-way spread
+            // ============================================
+            const fireRate = Math.max(1500, 2500 - (this.currentLevel * 100)); // Gets faster at higher levels
+            this.time.delayedCall(1000, () => { // Start firing after 1 second
+                if (enemyThree.active) {
+                    this.startEnemy3Firing(enemyThree, fireRate);
+                }
+            });
+        }
+    }
+
+    // Enemy3 regular firing pattern
+    startEnemy3Firing(enemy, fireRate) {
+        if (!enemy.active) return;
+
+        this.time.addEvent({
+            delay: fireRate,
+            callback: () => {
+                if (enemy.active && this.hero && this.hero.active) {
+                    // Aimed shot at player
+                    const angle = Phaser.Math.Angle.Between(enemy.x, enemy.y, this.hero.x, this.hero.y);
+                    const angleDeg = Phaser.Math.RadToDeg(angle);
+
+                    // Fire 3-way spread aimed at player
+                    this.createEnemyBullet(enemy.x, enemy.y + 20, angleDeg);
+                    this.createEnemyBullet(enemy.x, enemy.y + 20, angleDeg - 20);
+                    this.createEnemyBullet(enemy.x, enemy.y + 20, angleDeg + 20);
+                }
+            },
+            loop: true
+        });
+    }
+
+    // ============================================
+    // SUB-BOSS - Uses previous level's boss sprite
+    // Appears only from Level 2, spawns at center,
+    // more resistant, larger, uses boss attack patterns
+    // ============================================
+    createMiniBoss() {
+        // Only spawn from level 2 onwards
+        if (this.currentLevel < 2 || this.boss1Destroyed) {
+            return;
+        }
+
+        // Check if a sub-boss already exists to avoid multiple spawns
+        const existingSubBoss = this.enemies.getChildren().find(e => e.isSubBoss);
+        if (existingSubBoss) {
+            return;
+        }
+
+        // Use previous level's boss as sub-boss sprite
+        const previousBossLevel = this.currentLevel - 1;
+        const SUB_BOSS_CONFIG = {
+            1: { sprite: 'boss1', patterns: 'level1' },
+            2: { sprite: 'boss2', patterns: 'level2' },
+            3: { sprite: 'boss3', patterns: 'level3' },
+            4: { sprite: 'boss4', patterns: 'level4' },
+            5: { sprite: 'boss5', patterns: 'level5' },
+            6: { sprite: 'boss6', patterns: 'level6' },
+            7: { sprite: 'boss7', patterns: 'level7' }
+        };
+
+        const config = SUB_BOSS_CONFIG[previousBossLevel];
+        if (!config) {
+            console.warn(`No sub-boss config for previous level ${previousBossLevel}`);
+            return;
+        }
+
+        const difficulty = this.getDifficultyMultiplier();
+        const screenWidth = this.sys.game.config.width;
+
+        // Spawn at center of the screen using previous boss sprite
+        const subBoss = this.enemies.create(screenWidth / 2, -50, config.sprite);
+
+        // ============================================
+        // SUB-BOSS CONFIGURATION - Keep current size
+        // ============================================
+        const SUB_BOSS_STATS = {
+            scale: 0.5,          // Same size as current mini-boss
+            baseHealth: 25,      // Much more resistant than regular enemies
+            speed: 60,           // Slower movement (menacing presence)
+            hitDistance: 70,     // Larger hit area
+            scoreValue: 150      // Worth more points
+        };
+        // ============================================
+
+        subBoss.setScale(SUB_BOSS_STATS.scale);
+        subBoss.health = Math.floor(SUB_BOSS_STATS.baseHealth * difficulty);
+        subBoss.hitDistance = SUB_BOSS_STATS.hitDistance;
+        subBoss.scoreValue = SUB_BOSS_STATS.scoreValue;
+        subBoss.isSubBoss = true; // Flag to identify as sub-boss
+        subBoss.previousBossLevel = previousBossLevel; // Store which boss this represents
+
+        // Slow downward movement
+        subBoss.setVelocityY(SUB_BOSS_STATS.speed * difficulty);
+
+        // Add slight horizontal drift
+        subBoss.setVelocityX(Phaser.Math.Between(-30, 30));
+
+        // Play alert sound
+        this.sound.play('alarmSound', { volume: 0.2 });
+
+        // Stop after reaching middle area and start attack patterns from previous boss
+        this.time.delayedCall(2000, () => {
+            if (subBoss.active) {
+                subBoss.setVelocityY(0);
+                // Start horizontal patrol
+                subBoss.setVelocityX(80);
+
+                // Start firing using patterns from when this was the main boss
+                this.startSubBossAttack(subBoss, previousBossLevel);
+            }
+        });
+
+        // Reverse direction when hitting screen edges
+        this.time.addEvent({
+            delay: 100,
+            callback: () => {
+                if (subBoss.active) {
+                    if (subBoss.x <= 100 || subBoss.x >= 700) {
+                        subBoss.setVelocityX(-subBoss.body.velocity.x);
+                    }
+                }
+            },
+            loop: true
+        });
+
+        console.log(`Sub-Boss spawned at level ${this.currentLevel} using ${config.sprite} sprite`);
+    }
+
+    // Start sub-boss attack using the patterns from when it was the main boss
+    startSubBossAttack(subBoss, bossLevel) {
+        if (!subBoss.active) return;
+
+        // Use the same attack patterns as when this was the main boss
+        // Fire rate slightly faster for sub-boss (more aggressive)
+        const fireRate = 3500;
+
+        if (bossLevel <= 2) {
+            // Levels 1-2 boss patterns (simple 3-way spreads)
+            this.time.addEvent({
+                delay: fireRate,
+                callback: () => {
+                    if (subBoss.active) {
+                        this.enemyThreeFirePattern(subBoss);
+                    }
+                },
+                loop: true
+            });
+            this.time.addEvent({
+                delay: fireRate + 500,
+                callback: () => {
+                    if (subBoss.active) {
+                        this.enemyThreeFirePatternTwo(subBoss);
+                    }
+                },
+                loop: true
+            });
+        } else if (bossLevel <= 5) {
+            // Levels 3-5 boss patterns (more aggressive)
+            this.time.addEvent({
+                delay: fireRate,
+                callback: () => {
+                    if (subBoss.active) {
+                        this.enemyFourFirePattern(subBoss);
+                    }
+                },
+                loop: true
+            });
+            this.time.addEvent({
+                delay: fireRate + 500,
+                callback: () => {
+                    if (subBoss.active) {
+                        this.enemyFourFirePatternTwo(subBoss);
+                    }
+                },
+                loop: true
+            });
+        } else {
+            // Levels 6-7 boss patterns (most challenging)
+            this.time.addEvent({
+                delay: fireRate,
+                callback: () => {
+                    if (subBoss.active) {
+                        this.enemyFiveFirePattern(subBoss);
+                    }
+                },
+                loop: true
+            });
+            this.time.addEvent({
+                delay: fireRate + 500,
+                callback: () => {
+                    if (subBoss.active) {
+                        this.enemyFiveFirePatternTwo(subBoss);
+                    }
+                },
+                loop: true
+            });
+        }
+    }
+
+    // Legacy function kept for compatibility - can be removed later
+    startMiniBossFiring(miniBoss, fireRate) {
+        if (!miniBoss.active) return;
+        this.time.addEvent({
+            delay: fireRate,
+            callback: () => {
+                if (miniBoss.active) {
+                    this.miniBossFirePattern(miniBoss);
+                }
+            },
+            loop: true
+        });
+    }
+
+    miniBossFirePattern(enemy) {
+        if (!enemy.active) return;
+
+        // Pattern: 5-way spread + aimed shot at player
+        const patterns = [
+            () => {
+                // 5-way spread downward
+                for (let angle = 60; angle <= 120; angle += 15) {
+                    this.createEnemyBullet(enemy.x, enemy.y + 30, angle);
+                }
+            },
+            () => {
+                // Aimed triple shot at player
+                if (this.hero && this.hero.active) {
+                    const angleToPlayer = Phaser.Math.Angle.Between(
+                        enemy.x, enemy.y, this.hero.x, this.hero.y
+                    );
+                    const angleDeg = Phaser.Math.RadToDeg(angleToPlayer);
+                    this.createEnemyBullet(enemy.x, enemy.y + 30, angleDeg);
+                    this.createEnemyBullet(enemy.x, enemy.y + 30, angleDeg - 15);
+                    this.createEnemyBullet(enemy.x, enemy.y + 30, angleDeg + 15);
+                }
+            },
+            () => {
+                // Circular burst (8 directions)
+                for (let i = 0; i < 8; i++) {
+                    this.createEnemyBullet(enemy.x, enemy.y + 20, i * 45);
+                }
+            }
+        ];
+
+        // Randomly select a pattern
+        const pattern = Phaser.Utils.Array.GetRandom(patterns);
+        pattern();
+    }
+    // ============================================
+    // END SUB-BOSS SECTION
+    // ============================================
+
     fireBullet() {
         if (this.hero && this.hero.active) {
             if (!this.gameplayStarted) {
@@ -544,9 +1367,9 @@ class Example extends Phaser.Scene {
             this.pacifistAchieved = true;
         }
 
-        // Scroll the background
+        // Scroll the background vertically only (traditional shmup style)
         if (this.background) {
-            this.background.tilePositionY -= 1; // Adjust this value to change scroll speed
+            this.background.tilePositionY -= 1; // Vertical scroll only
         }
         // Update pacifist timer
         if (!this.pacifistAchieved && this.pacifistTimerText) {
@@ -573,17 +1396,31 @@ class Example extends Phaser.Scene {
             this.timeNearTop = 0;
         }
         this.lastUpdateTime = time;
-        // Remove any new enemies if enemy 3 has been destroyed
-        if (this.enemy3Destroyed) {
+        // Remove any new NON-BOSS enemies if enemy 3 has been destroyed (game won state)
+        // But DON'T destroy boss enemies, as they may be the new level's boss
+        if (this.boss1Destroyed && this.gameWon) {
             this.enemies.getChildren().forEach(enemy => {
-                if (enemy.active) {
+                if (enemy.active && !this.isBossEnemy(enemy)) {
                     enemy.destroy();
                 }
             });
         }
-        // Handle Enemy 3 horizontal movement
+
+        // DEBUG: Track boss every second
+        if (!this.lastBossDebugTime || time - this.lastBossDebugTime > 1000) {
+            this.lastBossDebugTime = time;
+            const bosses = this.enemies.getChildren().filter(e => this.isBossEnemy(e));
+            if (bosses.length > 0) {
+                bosses.forEach(b => {
+                    console.log(`DEBUG Boss: active=${b.active}, visible=${b.visible}, alpha=${b.alpha}, x=${b.x}, y=${b.y}, texture=${b.texture.key}, depth=${b.depth}`);
+                });
+            } else {
+                console.log(`DEBUG: No bosses in enemies group. boss1Destroyed=${this.boss1Destroyed}, gameWon=${this.gameWon}, currentLevel=${this.currentLevel}`);
+            }
+        }
+        // Handle boss (any type) horizontal movement
         this.enemies.getChildren().forEach((enemy) => {
-            if (enemy.texture.key === 'enemy3') {
+            if (this.isBossEnemy(enemy)) {
                 if (enemy.health <= enemy.maxHealth / 2 && !enemy.isMovingHorizontally) {
                     enemy.isMovingHorizontally = true;
                     enemy.setVelocityX(enemy.horizontalSpeed);
@@ -598,8 +1435,10 @@ class Example extends Phaser.Scene {
             this.shield.visible = this.hero.isInvincible || this.permanentInvulnerability;
         }
         // Handle enemy bullets
+        const gameWidth = this.game.config.width;
+        const gameHeight = this.game.config.height;
         this.enemyBullets.getChildren().forEach((bullet) => {
-            if (bullet.y > 600 || bullet.y < 0 || bullet.x > 800 || bullet.x < 0) {
+            if (bullet.y > gameHeight || bullet.y < 0 || bullet.x > gameWidth || bullet.x < 0) {
                 bullet.destroy();
             }
             if (this.hero && this.hero.active) {
@@ -634,11 +1473,53 @@ class Example extends Phaser.Scene {
                 } else if (this.cursors.down.isDown || this.wasdKeys.S.isDown) {
                     this.hero.setVelocityY(speed);
                 }
+
+                // ============================================
+                // HERO ANIMATION BASED ON MOVEMENT
+                // Only apply if not transformed (using spritesheet)
+                // ============================================
+                if (!this.heroTransformed && this.hero.anims) {
+                    const velocityY = this.hero.body.velocity.y;
+                    const velocityX = this.hero.body.velocity.x;
+
+                    if (velocityY < -100) {
+                        // Moving up fast - maximum thrust
+                        if (this.hero.anims.currentAnim?.key !== 'hero_thrust_max') {
+                            this.hero.play('hero_thrust_max');
+                        }
+                    } else if (velocityY < 0) {
+                        // Moving up slowly - medium thrust
+                        if (this.hero.anims.currentAnim?.key !== 'hero_thrust_medium') {
+                            this.hero.play('hero_thrust_medium');
+                        }
+                    } else if (velocityY > 100) {
+                        // Moving down fast - idle (no thrust)
+                        if (this.hero.anims.currentAnim?.key !== 'hero_idle') {
+                            this.hero.play('hero_idle');
+                        }
+                    } else if (velocityY > 0) {
+                        // Moving down slowly - light thrust
+                        if (this.hero.anims.currentAnim?.key !== 'hero_thrust_light') {
+                            this.hero.play('hero_thrust_light');
+                        }
+                    } else if (Math.abs(velocityX) > 0) {
+                        // Moving horizontally only - medium thrust
+                        if (this.hero.anims.currentAnim?.key !== 'hero_thrust_medium') {
+                            this.hero.play('hero_thrust_medium');
+                        }
+                    } else {
+                        // Stationary - medium thrust (hovering)
+                        if (this.hero.anims.currentAnim?.key !== 'hero_thrust_medium') {
+                            this.hero.play('hero_thrust_medium');
+                        }
+                    }
+                }
+                // ============================================
             }
 
-            // Handle Enemy 3 horizontal movement
+            // Handle boss (any type) horizontal movement
             this.enemies.getChildren().forEach((enemy) => {
-                if (enemy.texture.key === 'enemy3') {
+                if (this.isBossEnemy(enemy)) {
                     if (enemy.health <= enemy.maxHealth / 2 && !enemy.isMovingHorizontally) {
                         enemy.isMovingHorizontally = true;
                         enemy.setVelocityX(-enemy.horizontalSpeed);
@@ -655,7 +1536,8 @@ class Example extends Phaser.Scene {
                         const distance = Math.sqrt(dx * dx + dy * dy);
                         if (!this.hero.isInvincible) {
                             if ((enemy.texture.key === 'enemy1' && distance < 50) ||
-                                (enemy.texture.key === 'enemy2' && distance < 20)) {
+                                (enemy.texture.key === 'enemy2' && distance < 20) ||
+                                (enemy.texture.key === 'enemy3' && !enemy.isSubBoss && distance < 25)) {
                                 this.damageHero();
                             }
                         }
@@ -664,20 +1546,25 @@ class Example extends Phaser.Scene {
             }
             // Check for bullet-enemy collisions and off-screen enemies
             this.enemies.getChildren().forEach((enemy) => {
-                if (enemy.texture.key !== 'enemy3' && (enemy.y > 600 || enemy.y < 0 || enemy.x > 800 || enemy.x < 0)) {
+                // Protect bosses AND sub-boss from off-screen destruction (they spawn at y=-100 or y=-50)
+                // Regular enemy3 is NOT protected (only isSubBoss enemies are protected)
+                const isProtectedEnemy = this.isBossEnemy(enemy) || enemy.isSubBoss;
+                if (!isProtectedEnemy && (enemy.y > gameHeight || enemy.y < 0 || enemy.x > gameWidth || enemy.x < 0)) {
                     if (enemy.texture.key === 'enemy2' && this.enemy2BounceBehavior && Math.random() < (this.enemy2BounceChance || 0.3)) {
                         // Check if enough time has passed since the last bounce
                         if (time - enemy.lastBounceTime >= 500) { // 500 ms cooldown
                             // Bounce logic for enemy 2
-                            if (enemy.y > 600 || enemy.y < 0) {
+                            if (enemy.y > gameHeight || enemy.y < 0) {
                                 enemy.setVelocityY(-enemy.body.velocity.y);
+                                // Flip sprite vertically when changing vertical direction  
+                                enemy.setFlipY(!enemy.flipY);
                             }
-                            if (enemy.x > 800 || enemy.x < 0) {
+                            if (enemy.x > gameWidth || enemy.x < 0) {
                                 enemy.setVelocityX(-enemy.body.velocity.x);
                             }
                             // Ensure the enemy stays within bounds
-                            enemy.x = Phaser.Math.Clamp(enemy.x, 0, 800);
-                            enemy.y = Phaser.Math.Clamp(enemy.y, 0, 600);
+                            enemy.x = Phaser.Math.Clamp(enemy.x, 0, gameWidth);
+                            enemy.y = Phaser.Math.Clamp(enemy.y, 0, gameHeight);
                             // Update the last bounce time
                             enemy.lastBounceTime = time;
                         }
@@ -690,23 +1577,31 @@ class Example extends Phaser.Scene {
                     const dx = enemy.x - bullet.x;
                     const dy = enemy.y - bullet.y;
                     const distance = Math.sqrt(dx * dx + dy * dy);
-                    let hitDistance = 50;
-                    if (enemy.texture.key === 'enemy3' || enemy.texture.key === 'enemy4' || enemy.texture.key === 'enemy5') {
-                        hitDistance = 110; // Use 110 pixels for bosses
+
+                    // Determine hit distance based on enemy type
+                    // Use enemy-specific hitDistance if defined (bosses and mini-boss)
+                    // Otherwise use default values based on texture key
+                    let hitDistance = enemy.hitDistance || 50; // Default for regular enemies
+                    if (this.isBossEnemy(enemy) && !enemy.hitDistance) {
+                        hitDistance = 110; // Fallback for bosses without hitDistance
                     }
                     if (distance < hitDistance) {
                         this.createBulletExplosion(bullet.x, bullet.y);
                         bullet.destroy();
                         enemy.health -= 1; // Always decrease enemy health by 1
                         this.playHitSound(); // Play hit sound
-                        // Update health bar for any boss
-                        if (enemy.texture.key === 'enemy3' || enemy.texture.key === 'enemy4' || enemy.texture.key === 'enemy5') {
-                            this.updateEnemy3HealthBar(enemy);
+                        // Update health bar for any boss (all 8 levels)
+                        if (this.isBossEnemy(enemy)) {
+                            this.updateboss1HealthBar(enemy);
                         }
                         if (enemy.health <= 0) {
                             const enemyX = enemy.x;
                             const enemyY = enemy.y;
                             const enemyType = enemy.texture.key;
+                            // Store flags before destroying enemy
+                            const wasSubBoss = enemy.isSubBoss || false;
+                            const wasRegularEnemy3 = enemy.isRegularEnemy3 || false;
+                            const wasScoreValue = enemy.scoreValue;
                             enemy.destroy();
                             this.createExplosion(enemyX, enemyY, enemyType);
                             this.playExplosionSound(); // Play explosion sound immediately
@@ -718,7 +1613,7 @@ class Example extends Phaser.Scene {
                                 this.pacifistTimer = 0;
                             }
                             // Increment the counter for enemies killed during boss fight
-                            if (this.enemies.getChildren().some(e => e.texture.key === 'enemy3')) {
+                            if (this.enemies.getChildren().some(e => this.isBossEnemy(e))) {
                                 this.enemiesKilledDuringBossFight++;
                             }
                             // Update total kill count
@@ -731,25 +1626,39 @@ class Example extends Phaser.Scene {
                                 this.score += 20;
                             } else if (enemyType === 'enemy2') {
                                 this.score += 10;
-                            } else if (enemyType === 'enemy3') {
+                            } else if (enemyType === 'enemy3' && wasRegularEnemy3) {
+                                // Regular enemy3 (not sub-boss) - worth more than enemy2
+                                this.score += 30;
+                                // 40% chance to drop a power-up
+                                if (Math.random() < 0.4) {
+                                    this.spawnPowerUp(enemyX, enemyY);
+                                }
+                            } else if (wasSubBoss) {
+                                // Sub-boss scoring and rewards (uses boss sprite but wasSubBoss flag)
+                                this.score += wasScoreValue || 150;
+                                // Sub-boss has high chance to drop power-up
+                                if (Math.random() < 0.8) {
+                                    this.spawnPowerUp(enemyX, enemyY);
+                                }
+                                // Play extra explosion for sub-boss
+                                this.time.delayedCall(100, this.playExplosionSound, [], this);
+                            } else if (this.isBossEnemy({ texture: { key: enemyType } })) {
+                                // Main Boss scoring - progressive points based on level
                                 this.unlockAchievement('bossKill');
-                                this.score += 1000;
-                            } else if (enemyType === 'enemy4') {
-                                this.score += 1500;
-                            } else if (enemyType === 'enemy5') {
-                                this.unlockAchievement('bossKill');
-                                this.score += 2000;
+                                const bossLevel = parseInt(enemyType.replace('boss', ''));
+                                this.score += 1000 + ((bossLevel - 1) * 250); // 1000, 1250, 1500, ...
                             }
                             this.scoreText.setText('Score: ' + this.score);
-                            // Handle boss destruction
-                            if (enemyType === 'enemy3' || enemyType === 'enemy4' || enemyType === 'enemy5') {
-                                this.enemy3HealthBar.destroy();
-                                this.enemy3Destroyed = true;
+                            // Handle MAIN boss destruction (all 8 bosses) - NOT sub-boss
+                            // Sub-boss uses boss sprites but should NOT trigger level completion
+                            if (this.isBossEnemy({ texture: { key: enemyType } }) && !wasSubBoss) {
+                                this.boss1HealthBar.destroy();
+                                this.boss1Destroyed = true;
                                 this.enemies.clear(true, true);
                                 this.enemyBullets.clear(true, true);
                                 this.playSeriesOfExplosions();
                                 this.time.delayedCall(2000, this.showWinScreen, [], this);
-                            } else if (enemyType === 'enemy1' && !this.enemy3Destroyed) {
+                            } else if (enemyType === 'enemy1' && !this.boss1Destroyed) {
                                 // Play explosion sound again after an eighth of a second
                                 this.time.delayedCall(125, this.playExplosionSound, [], this);
                                 // 60% chance to drop a star
@@ -774,12 +1683,12 @@ class Example extends Phaser.Scene {
         }
 
         // Check if the game has been won
-        if (this.enemy3Destroyed && !this.gameWon) {
+        if (this.boss1Destroyed && !this.gameWon) {
             // Do nothing here, as we're using the delayed call to show the win screen
         }
-        // Check enemy 3's health and adjust bullet variance
+        // Check boss's health and adjust bullet variance
         this.enemies.getChildren().forEach((enemy) => {
-            if (enemy.texture.key === 'enemy3' && enemy.health <= 80 && enemy.bulletVariance === 20) {
+            if (this.isBossEnemy(enemy) && enemy.health <= enemy.maxHealth * 0.5 && enemy.bulletVariance === 20) {
                 enemy.bulletVariance = 10; // Change to 10 degrees (20 degrees total)
             }
         });
@@ -793,7 +1702,7 @@ class Example extends Phaser.Scene {
         this.physics.overlap(this.hero, this.powerUps, this.collectPowerUp, null, this);
         // Check if any power-ups have gone off-screen
         this.powerUps.getChildren().forEach((powerUp) => {
-            if (powerUp.y > 600) {
+            if (powerUp.y > this.game.config.height) {
                 powerUp.destroy();
                 this.starsCollectedBeforeExpire = 0; // Reset the counter when a star goes off-screen
                 // Update perfectionist counter text
@@ -810,6 +1719,8 @@ class Example extends Phaser.Scene {
         if (powerUp.countdownEvent) {
             powerUp.countdownEvent.remove();
         }
+        // Stop any active tweens on the power-up (fade/blink effects)
+        this.tweens.killTweensOf(powerUp);
 
         const dropType = powerUp.dropType || 'upgrade';
         powerUp.destroy();
@@ -828,7 +1739,7 @@ class Example extends Phaser.Scene {
             // Life drop - add extra life
             this.playerLives++;
             this.livesText.setText('x' + this.playerLives);
-            this.sound.play('shieldSound', { volume: 0.6 });
+            this.sound.play('lifeSound', { volume: 0.5 });
             return;
         }
 
@@ -849,11 +1760,43 @@ class Example extends Phaser.Scene {
                 hero.weaponPower++;
                 weaponLevelIncreased = true;
                 this.weaponUpgraded = true;
-                if (this.enemies.getChildren().some(enemy => enemy.texture.key === 'enemy3')) {
+                if (this.enemies.getChildren().some(enemy => this.isBossEnemy(enemy))) {
                     this.upgradeDuringBossFight = true;
                 }
                 this.starCounter = 0;
                 this.updateWeaponPowerDisplay();
+
+                // NOTE: max_hero transformation DISABLED
+                // Ship now always uses spritesheet animations
+                // Original code commented out:
+                /*
+                // Transform ship to max_hero when reaching weapon power 8
+                if (hero.weaponPower === 8 && !this.heroTransformed) {
+                    this.heroTransformed = true;
+
+                    // Create shield transformation effect
+                    const shieldCircle = this.add.circle(hero.x, hero.y, 40, 0xffffff, 0.8);
+                    shieldCircle.setDepth(10);
+
+                    // Animate shield expanding and fading
+                    this.tweens.add({
+                        targets: shieldCircle,
+                        scaleX: 2.0,
+                        scaleY: 2.0,
+                        alpha: 0,
+                        duration: 600,
+                        ease: 'Power2',
+                        onComplete: () => shieldCircle.destroy()
+                    });
+
+                    // Transform ship texture and size
+                    hero.setTexture('max_hero');
+                    hero.setScale(0.1); // User's preferred size
+
+                    this.sound.play('shieldSound', { volume: 0.6 });
+                }
+                */
+
                 if (this.gameplayStarted && this.time.now - this.gameStartTime <= 21000) {
                     this.unlockAchievement('lucky');
                 } else if (!this.gameplayStarted) {
@@ -920,8 +1863,8 @@ class Example extends Phaser.Scene {
             if (this.time.now - this.lastStarCollectionTime < 333) { // 1/3 of a second is 333 milliseconds
                 this.unlockAchievement('greedy');
             }
-            // Check if the boss (enemy 3) is present in the scene
-            const bossPresent = this.enemies.getChildren().some(enemy => enemy.texture.key === 'enemy3');
+            // Check if any boss is present in the scene
+            const bossPresent = this.enemies.getChildren().some(enemy => this.isBossEnemy(enemy));
             if (bossPresent) {
                 this.checkAchievements(); // Check achievements
             }
@@ -929,6 +1872,14 @@ class Example extends Phaser.Scene {
                 this.destroyHero();
             } else {
                 this.hero.weaponPower--;
+
+                // Revert to normal hero sprite if weapon power drops below 8
+                if (this.hero.weaponPower < 8 && this.heroTransformed) {
+                    this.heroTransformed = false;
+                    this.hero.setTexture('hero');
+                    this.hero.setScale(1.0); // Reset to default scale
+                }
+
                 this.updateWeaponPowerDisplay();
                 // Make the hero invincible for 1 second
                 this.hero.isInvincible = true;
@@ -995,20 +1946,33 @@ class Example extends Phaser.Scene {
             this.playExplosionSound();
 
             this.time.delayedCall(1000, () => {
-                const overlay = this.add.rectangle(400, 300, 800, 600, 0x000000, 0.7);
+                const gw = this.game.config.width;
+                const gh = this.game.config.height;
+                const centerX = gw / 2;
+                const centerY = gh / 2;
+                const isMobile = window.isMobile;
+
+                const overlay = this.add.rectangle(centerX, centerY, gw, gh, 0x000000, 0.7);
                 overlay.setDepth(1000);
-                this.add.text(400, 300, 'Game Over', {
-                    fontSize: '64px',
+                this.add.text(centerX, centerY, 'Game Over', {
+                    fontSize: isMobile ? '48px' : '64px',
                     fill: '#fff'
                 }).setOrigin(0.5).setDepth(1001);
-                this.add.text(400, 350, 'Pressione qualquer tecla para reiniciar', {
-                    fontSize: '24px',
+                this.add.text(centerX, centerY + 50, isMobile ? 'Toque para reiniciar' : 'Pressione qualquer tecla para reiniciar', {
+                    fontSize: isMobile ? '18px' : '24px',
                     fill: '#fff'
                 }).setOrigin(0.5).setDepth(1001);
                 this.input.keyboard.enabled = true;
+
+                // Support both keyboard and touch for restart
                 this.input.keyboard.once('keydown', () => {
                     this.scene.start('IntroScreen');
                 });
+                if (isMobile) {
+                    this.input.once('pointerdown', () => {
+                        this.scene.start('IntroScreen');
+                    });
+                }
             }, [], this);
         }
     }
@@ -1053,7 +2017,10 @@ class Example extends Phaser.Scene {
                         const bullet = this.enemyBullets.create(enemy.x, enemy.y + 30, 'Cannon_bullet');
                         bullet.setTint(0xff0000); // Make enemy bullets red
                         const angle = Phaser.Math.Angle.Between(enemy.x, enemy.y, this.hero.x, this.hero.y);
-                        this.physics.velocityFromRotation(angle, 200, bullet.body.velocity);
+
+                        // Apply difficulty scaling to bullet speed
+                        const difficulty = this.getDifficultyMultiplier();
+                        this.physics.velocityFromRotation(angle, 200 * difficulty, bullet.body.velocity);
                     }
                 }
             });
@@ -1061,15 +2028,79 @@ class Example extends Phaser.Scene {
     }
     createEnemyThree() {
         const screenWidth = this.sys.game.config.width;
-        const enemyThree = this.enemies.create(screenWidth / 2, -100, 'enemy3');
+
+        // ============================================
+        // BOSS CONFIGURATION - Adjust these values for fine-tuning
+        // sprite: Texture key for the boss
+        // health: Base HP of the boss (10% increase per level)
+        // scale: Visual size of the boss sprite
+        // hitDistance: Radius in pixels for bullet collision detection
+        // isAnimated: Whether the boss uses spritesheet animation
+        // ============================================
+        const BOSS_CONFIG = {
+            1: { sprite: 'boss1', health: 100, scale: 0.7, hitDistance: 100 },
+            2: { sprite: 'boss2', health: 110, scale: 0.7, hitDistance: 110 },
+            3: { sprite: 'boss3', health: 121, scale: 0.7, hitDistance: 110 },
+            4: { sprite: 'boss4', health: 133, scale: 0.65, hitDistance: 105 },
+            5: { sprite: 'boss5', health: 146, scale: 0.65, hitDistance: 105 },
+            6: { sprite: 'boss6', health: 161, scale: 0.6, hitDistance: 100 },
+            7: { sprite: 'boss7', health: 177, scale: 0.6, hitDistance: 100 },
+            8: { sprite: 'boss8', health: 195, scale: 0.55, hitDistance: 95 },
+            9: { sprite: 'finalboss', health: 300, scale: 1, hitDistance: 120, isAnimated: true }
+        };
+        // ============================================
+
+        const config = BOSS_CONFIG[this.currentLevel] || BOSS_CONFIG[1];
+        const bossSprite = config.sprite;
+        const baseHealth = config.health;
+        const bossScale = config.scale;
+
+        // Create boss - use sprite for static, spritesheet for animated
+        let enemyThree;
+        if (config.isAnimated) {
+            // Level 9: Animated final boss (clone of hero, 3x larger)
+            enemyThree = this.physics.add.sprite(screenWidth / 2, -200, bossSprite);
+            this.enemies.add(enemyThree);
+            enemyThree.play('finalboss_thrust'); // Start with thrust animation
+            enemyThree.isFinalBoss = true; // Mark as final boss for special handling
+        } else {
+            // Normal levels: Static boss sprite
+            enemyThree = this.enemies.create(screenWidth / 2, -100, bossSprite);
+        }
+
         if (!enemyThree) {
-            console.error('Failed to create enemy 3');
+            console.error(`Failed to create boss for level ${this.currentLevel}`);
             return;
         }
-        enemyThree.setScale(1.2);
+
+        // Debug logging
+        console.log(`Boss created: Level ${this.currentLevel}, Sprite: ${bossSprite}, Scale: ${bossScale}`);
+        console.log(`Boss position: x=${enemyThree.x}, y=${enemyThree.y}`);
+        console.log(`Boss texture loaded:`, enemyThree.texture.key);
+
+        enemyThree.setScale(bossScale);
+
+        // Ensure the boss is visible and properly configured
+        enemyThree.setVisible(true);
+        enemyThree.setAlpha(1);
+        enemyThree.setDepth(100); // Make sure it's above other sprites
+
+        // DEBUG: Verify boss still exists after short delay
+        this.time.delayedCall(100, () => {
+            console.log(`DEBUG 100ms: boss active=${enemyThree.active}, exists in group=${this.enemies.contains(enemyThree)}`);
+        });
+        this.time.delayedCall(500, () => {
+            console.log(`DEBUG 500ms: boss active=${enemyThree.active}, exists in group=${this.enemies.contains(enemyThree)}`);
+            if (enemyThree.active) {
+                console.log(`DEBUG 500ms: boss x=${enemyThree.x}, y=${enemyThree.y}, visible=${enemyThree.visible}`);
+            }
+        });
+
         enemyThree.setVelocityY(100); // Set initial downward velocity
-        enemyThree.health = 150;
-        enemyThree.maxHealth = 150;
+        enemyThree.health = baseHealth;
+        enemyThree.maxHealth = baseHealth;
+        enemyThree.bossLevel = this.currentLevel; // Store boss level for pattern selection
+        enemyThree.hitDistance = config.hitDistance; // Store hitDistance for collision detection
         enemyThree.bulletVariance = 20;
         enemyThree.fireDelay = 1000;
         enemyThree.isMovingHorizontally = false;
@@ -1080,58 +2111,90 @@ class Example extends Phaser.Scene {
             volume: 0.3
         });
 
-        // Stop the enemy after 2 seconds and start slow horizontal movement
+        // Stop the enemy after 2 seconds and start movement behavior
         this.time.delayedCall(2000, () => {
             if (enemyThree.active) {
                 enemyThree.setVelocityY(0);
-                // Start slow horizontal movement immediately after stopping
-                this.time.delayedCall(500, () => {
-                    if (enemyThree.active) {
-                        enemyThree.isMovingHorizontally = true;
-                        enemyThree.setVelocityX(60); // Slow horizontal movement
-                    }
-                });
+
+                // Level 9: Special intelligent movement (like a PvP clone)
+                if (this.currentLevel === 9) {
+                    // Start AI behavior for final boss
+                    this.startFinalBossAI(enemyThree);
+                } else {
+                    // Normal bosses: slow horizontal movement
+                    this.time.delayedCall(500, () => {
+                        if (enemyThree.active) {
+                            enemyThree.isMovingHorizontally = true;
+                            enemyThree.setVelocityX(60);
+                        }
+                    });
+                }
             }
         }, [], this);
         // Create the health bar
-        this.enemy3HealthBar = this.add.graphics();
-        this.updateEnemy3HealthBar(enemyThree);
-        // Start the first firing pattern timer after 5 seconds
-        this.time.delayedCall(5000, () => {
-            if (enemyThree.active) {
-                this.enemyThreeFirePattern(enemyThree);
-            }
-        }, [], this);
-        // Start the second firing pattern timer after 5.2 seconds
-        this.time.delayedCall(5200, () => {
-            if (enemyThree.active) {
-                this.enemyThreeFirePatternTwo(enemyThree);
-            }
-        }, [], this);
-        // Start the third firing pattern timer after 5.4 seconds
-        this.time.delayedCall(5400, () => {
-            if (enemyThree.active) {
-                this.enemyThreeFirePatternThree(enemyThree);
-            }
-        }, [], this);
-        // Start the fourth firing pattern timer after 5.6 seconds
-        this.time.delayedCall(5600, () => {
-            if (enemyThree.active) {
-                this.enemyThreeFirePatternFour(enemyThree);
-            }
-        }, [], this);
-        // Start the fifth firing pattern timer after 5.8 seconds
-        this.time.delayedCall(5800, () => {
-            if (enemyThree.active) {
-                this.enemyThreeFirePatternFive(enemyThree);
-            }
-        }, [], this);
-        // Start the sixth firing pattern timer after 6 seconds
-        this.time.delayedCall(6000, () => {
-            if (enemyThree.active) {
-                this.enemyThreeFirePatternSix(enemyThree);
-            }
-        }, [], this);
+        this.boss1HealthBar = this.add.graphics();
+        this.updateboss1HealthBar(enemyThree);
+
+        // Start firing patterns based on boss level
+        // Levels 1-2: Simple patterns (enemyThree patterns)
+        // Levels 3-5: Medium patterns (enemyFour patterns)
+        // Levels 6-8: Hard patterns (enemyFive patterns)
+        // Fire rate decreases (faster) as level increases
+        const baseDelay = Math.max(3000, 6000 - (this.currentLevel * 400)); // 5600ms to 2800ms
+
+        if (this.currentLevel <= 2) {
+            // Levels 1-2: Simple 3-way spread patterns
+            this.time.delayedCall(baseDelay, () => {
+                if (enemyThree.active) this.enemyThreeFirePattern(enemyThree);
+            }, [], this);
+            this.time.delayedCall(baseDelay + 200, () => {
+                if (enemyThree.active) this.enemyThreeFirePatternTwo(enemyThree);
+            }, [], this);
+            this.time.delayedCall(baseDelay + 400, () => {
+                if (enemyThree.active) this.enemyThreeFirePatternThree(enemyThree);
+            }, [], this);
+            this.time.delayedCall(baseDelay + 600, () => {
+                if (enemyThree.active) this.enemyThreeFirePatternFour(enemyThree);
+            }, [], this);
+        } else if (this.currentLevel <= 5) {
+            // Levels 3-5: Medium aggressive patterns
+            this.time.delayedCall(baseDelay, () => {
+                if (enemyThree.active) this.enemyFourFirePattern(enemyThree);
+            }, [], this);
+            this.time.delayedCall(baseDelay + 200, () => {
+                if (enemyThree.active) this.enemyFourFirePatternTwo(enemyThree);
+            }, [], this);
+            this.time.delayedCall(baseDelay + 400, () => {
+                if (enemyThree.active) this.enemyFourFirePatternThree(enemyThree);
+            }, [], this);
+            this.time.delayedCall(baseDelay + 600, () => {
+                if (enemyThree.active) this.enemyFourFirePatternFour(enemyThree);
+            }, [], this);
+        } else if (this.currentLevel <= 8) {
+            // Levels 6-8: Most challenging patterns
+            this.time.delayedCall(baseDelay, () => {
+                if (enemyThree.active) this.enemyFiveFirePattern(enemyThree);
+            }, [], this);
+            this.time.delayedCall(baseDelay + 150, () => {
+                if (enemyThree.active) this.enemyFiveFirePatternTwo(enemyThree);
+            }, [], this);
+            this.time.delayedCall(baseDelay + 300, () => {
+                if (enemyThree.active) this.enemyFiveFirePatternThree(enemyThree);
+            }, [], this);
+            this.time.delayedCall(baseDelay + 450, () => {
+                if (enemyThree.active) this.enemyFiveFirePatternFour(enemyThree);
+            }, [], this);
+            this.time.delayedCall(baseDelay + 600, () => {
+                if (enemyThree.active) this.enemyFiveFirePatternFive(enemyThree);
+            }, [], this);
+        } else if (this.currentLevel === 9) {
+            // Level 9: FINAL BOSS - Directed attacks at player (like a PvP clone)
+            // Single focused attack pattern with intervals
+            this.time.delayedCall(baseDelay, () => {
+                if (enemyThree.active) this.finalBossDirectedAttack(enemyThree);
+            }, [], this);
+        }
+
         // Set up horizontal movement behavior
         this.time.addEvent({
             delay: 100, // Check every 100ms
@@ -1158,6 +2221,7 @@ class Example extends Phaser.Scene {
             loop: true
         });
     }
+
     reverseEnemyThreeDirection(enemy) {
         enemy.setVelocityX(-enemy.body.velocity.x);
     }
@@ -1233,100 +2297,332 @@ class Example extends Phaser.Scene {
             }, [], this);
         }
     }
+
+    // LEVEL 2 BOSS (boss2) ATTACK PATTERNS - More aggressive
+    enemyFourFirePattern(enemy) {
+        if (enemy.active) {
+            // 5-bullet spread pattern (more bullets than Level 1)
+            this.createEnemyBullet(enemy.x, enemy.y, 60);  // Far right
+            this.createEnemyBullet(enemy.x, enemy.y, 75);  // Right
+            this.createEnemyBullet(enemy.x, enemy.y, 90);  // Center
+            this.createEnemyBullet(enemy.x, enemy.y, 105); // Left
+            this.createEnemyBullet(enemy.x, enemy.y, 120); // Far left
+            // Faster fire rate (4000ms vs 5000ms)
+            this.time.delayedCall(4000, () => {
+                this.enemyFourFirePattern(enemy);
+            }, [], this);
+        }
+    }
+
+    enemyFourFirePatternTwo(enemy) {
+        if (enemy.active) {
+            // 8-way circular burst
+            for (let i = 0; i < 8; i++) {
+                this.createEnemyBullet(enemy.x, enemy.y, i * 45);
+            }
+            this.time.delayedCall(4000, () => {
+                this.enemyFourFirePatternTwo(enemy);
+            }, [], this);
+        }
+    }
+
+    enemyFourFirePatternThree(enemy) {
+        if (enemy.active) {
+            // Aimed shot at player with spread
+            if (this.hero && this.hero.active) {
+                const angle = Phaser.Math.Angle.Between(enemy.x, enemy.y, this.hero.x, this.hero.y);
+                const angleDeg = Phaser.Math.RadToDeg(angle);
+                this.createEnemyBullet(enemy.x, enemy.y, angleDeg);
+                this.createEnemyBullet(enemy.x, enemy.y, angleDeg - 15);
+                this.createEnemyBullet(enemy.x, enemy.y, angleDeg + 15);
+            }
+            this.time.delayedCall(4000, () => {
+                this.enemyFourFirePatternThree(enemy);
+            }, [], this);
+        }
+    }
+
+    enemyFourFirePatternFour(enemy) {
+        if (enemy.active) {
+            // Alternating wave pattern
+            if (!enemy.waveDirection) enemy.waveDirection = 0;
+            enemy.waveDirection = (enemy.waveDirection + 30) % 360;
+
+            for (let i = 0; i < 3; i++) {
+                this.createEnemyBullet(enemy.x, enemy.y, 60 + enemy.waveDirection + (i * 30));
+            }
+
+            this.time.delayedCall(4000, () => {
+                this.enemyFourFirePatternFour(enemy);
+            }, [], this);
+        }
+    }
+
+    // LEVEL 3 BOSS (boss3) ATTACK PATTERNS - Most challenging
+    enemyFiveFirePattern(enemy) {
+        if (enemy.active) {
+            // Rotating spiral barrage
+            if (!enemy.spiralAngle) enemy.spiralAngle = 0;
+            enemy.spiralAngle = (enemy.spiralAngle + 20) % 360;
+
+            // Fire 6 bullets in a rotating spiral
+            for (let i = 0; i < 6; i++) {
+                this.createEnemyBullet(enemy.x, enemy.y, enemy.spiralAngle + (i * 60));
+            }
+
+            this.time.delayedCall(3200, () => {
+                this.enemyFiveFirePattern(enemy);
+            }, [], this);
+        }
+    }
+
+    enemyFiveFirePatternTwo(enemy) {
+        if (enemy.active) {
+            // Double spiral - clockwise and counter-clockwise
+            if (!enemy.doubleSpiral) enemy.doubleSpiral = 0;
+            enemy.doubleSpiral = (enemy.doubleSpiral + 25) % 360;
+
+            // Clockwise spiral
+            for (let i = 0; i < 4; i++) {
+                this.createEnemyBullet(enemy.x, enemy.y, enemy.doubleSpiral + (i * 90));
+            }
+            // Counter-clockwise spiral
+            for (let i = 0; i < 4; i++) {
+                this.createEnemyBullet(enemy.x, enemy.y, 360 - enemy.doubleSpiral + (i * 90));
+            }
+
+            this.time.delayedCall(3200, () => {
+                this.enemyFiveFirePatternTwo(enemy);
+            }, [], this);
+        }
+    }
+
+    enemyFiveFirePatternThree(enemy) {
+        if (enemy.active) {
+            // Triple aimed shots at player with wider spread
+            if (this.hero && this.hero.active) {
+                const angle = Phaser.Math.Angle.Between(enemy.x, enemy.y, this.hero.x, this.hero.y);
+                const angleDeg = Phaser.Math.RadToDeg(angle);
+
+                // Fire 5 bullets aimed at player with spread
+                for (let i = -2; i <= 2; i++) {
+                    this.createEnemyBullet(enemy.x, enemy.y, angleDeg + (i * 10));
+                }
+            }
+
+            this.time.delayedCall(3200, () => {
+                this.enemyFiveFirePatternThree(enemy);
+            }, [], this);
+        }
+    }
+
+    enemyFiveFirePatternFour(enemy) {
+        if (enemy.active) {
+            // Cross pattern with diagonal sweeps
+            if (!enemy.crossAngle) enemy.crossAngle = 0;
+            enemy.crossAngle = (enemy.crossAngle + 15) % 90;
+
+            // Main cross (4 directions)
+            this.createEnemyBullet(enemy.x, enemy.y, 0 + enemy.crossAngle);
+            this.createEnemyBullet(enemy.x, enemy.y, 90 + enemy.crossAngle);
+            this.createEnemyBullet(enemy.x, enemy.y, 180 + enemy.crossAngle);
+            this.createEnemyBullet(enemy.x, enemy.y, 270 + enemy.crossAngle);
+
+            // Diagonal cross
+            this.createEnemyBullet(enemy.x, enemy.y, 45 + enemy.crossAngle);
+            this.createEnemyBullet(enemy.x, enemy.y, 135 + enemy.crossAngle);
+            this.createEnemyBullet(enemy.x, enemy.y, 225 + enemy.crossAngle);
+            this.createEnemyBullet(enemy.x, enemy.y, 315 + enemy.crossAngle);
+
+            this.time.delayedCall(3200, () => {
+                this.enemyFiveFirePatternFour(enemy);
+            }, [], this);
+        }
+    }
+
+    enemyFiveFirePatternFive(enemy) {
+        if (enemy.active) {
+            // Random scatter burst - 12 bullets in random directions
+            for (let i = 0; i < 12; i++) {
+                const randomAngle = Phaser.Math.Between(0, 360);
+                this.createEnemyBullet(enemy.x, enemy.y, randomAngle);
+            }
+
+            this.time.delayedCall(3200, () => {
+                this.enemyFiveFirePatternFive(enemy);
+            }, [], this);
+        }
+    }
+
+    // ============================================
+    // LEVEL 9 FINAL BOSS AI & ATTACK PATTERNS
+    // Intelligent movement and directed attacks (PvP clone behavior)
+    // ============================================
+
+    // AI behavior for final boss - intelligent movement like a player clone
+    startFinalBossAI(enemy) {
+        if (!enemy.active) return;
+
+        const screenWidth = this.sys.game.config.width;
+        const minY = 80;   // Top limit
+        const maxY = 300;  // Center of screen (maximum descent)
+
+        // Initial position
+        enemy.targetY = 150;
+        enemy.aiState = 'tracking'; // States: tracking, attacking, dodging
+
+        // AI update loop - runs every 100ms
+        this.time.addEvent({
+            delay: 100,
+            callback: () => {
+                if (!enemy.active || !this.hero || !this.hero.active) return;
+
+                // ====== HORIZONTAL TRACKING ======
+                // Follow player horizontally with slight delay (mirror movement)
+                const heroX = this.hero.x;
+                const diffX = heroX - enemy.x;
+
+                // Smooth horizontal tracking with speed limit
+                const trackingSpeed = 120;
+                if (Math.abs(diffX) > 30) {
+                    enemy.setVelocityX(diffX > 0 ? trackingSpeed : -trackingSpeed);
+                } else {
+                    enemy.setVelocityX(diffX * 2); // Slow down when close
+                }
+
+                // Keep within screen bounds
+                if (enemy.x < 100) enemy.setVelocityX(Math.max(enemy.body.velocity.x, 50));
+                if (enemy.x > screenWidth - 100) enemy.setVelocityX(Math.min(enemy.body.velocity.x, -50));
+
+                // ====== VERTICAL MOVEMENT ======
+                // Move up and down between top and center
+                if (!enemy.verticalDirection) enemy.verticalDirection = 1;
+
+                // Change direction at limits
+                if (enemy.y <= minY) {
+                    enemy.verticalDirection = 1;
+                    enemy.targetY = Phaser.Math.Between(150, maxY);
+                } else if (enemy.y >= maxY) {
+                    enemy.verticalDirection = -1;
+                    enemy.targetY = Phaser.Math.Between(minY, 150);
+                }
+
+                // Move towards target Y
+                const diffY = enemy.targetY - enemy.y;
+                if (Math.abs(diffY) > 20) {
+                    enemy.setVelocityY(diffY > 0 ? 60 : -60);
+                } else {
+                    enemy.setVelocityY(0);
+                    // Occasionally change target
+                    if (Math.random() < 0.02) {
+                        enemy.targetY = Phaser.Math.Between(minY, maxY);
+                    }
+                }
+            },
+            loop: true
+        });
+    }
+
+    // Directed attack - fires at player with controlled intervals
+    finalBossDirectedAttack(enemy) {
+        if (!enemy.active || !this.hero || !this.hero.active) return;
+
+        // Calculate angle to player
+        const angle = Phaser.Math.Angle.Between(enemy.x, enemy.y, this.hero.x, this.hero.y);
+        const angleDeg = Phaser.Math.RadToDeg(angle);
+
+        // Fire 3-way spread at player (like hero's weapon)
+        this.createEnemyBullet(enemy.x, enemy.y, angleDeg);
+        this.createEnemyBullet(enemy.x, enemy.y, angleDeg - 15);
+        this.createEnemyBullet(enemy.x, enemy.y, angleDeg + 15);
+
+        // Occasionally fire a tighter burst
+        if (Math.random() < 0.3) {
+            this.time.delayedCall(200, () => {
+                if (enemy.active && this.hero && this.hero.active) {
+                    const angle2 = Phaser.Math.Angle.Between(enemy.x, enemy.y, this.hero.x, this.hero.y);
+                    const angleDeg2 = Phaser.Math.RadToDeg(angle2);
+                    this.createEnemyBullet(enemy.x, enemy.y, angleDeg2);
+                    this.createEnemyBullet(enemy.x, enemy.y, angleDeg2 - 8);
+                    this.createEnemyBullet(enemy.x, enemy.y, angleDeg2 + 8);
+                }
+            }, [], this);
+        }
+
+        // Repeat attack with interval (800-1200ms for variability)
+        const nextAttackDelay = Phaser.Math.Between(800, 1200);
+        this.time.delayedCall(nextAttackDelay, () => {
+            this.finalBossDirectedAttack(enemy);
+        }, [], this);
+    }
+
     createEnemyBullet(x, y, angle) {
         const bullet = this.enemyBullets.create(x, y, 'Cannon_bullet');
         bullet.setTint(0xff0000); // Make enemy bullets red
-        const speed = 200;
+
+        // Apply difficulty scaling to bullet speed
+        const difficulty = this.getDifficultyMultiplier();
+        const speed = 200 * difficulty;
+
         const radians = Phaser.Math.DegToRad(angle);
         bullet.setVelocity(
             Math.cos(radians) * speed,
             Math.sin(radians) * speed
         );
     }
-    updateEnemy3HealthBar(enemy) {
-        if (this.enemy3HealthBar) {
-            this.enemy3HealthBar.clear();
-            const barHeight = 500; // Height of the health bar
-            const barWidth = 20; // Width of the health bar
-            const x = 780; // X position of the health bar (right side of the screen)
+    updateboss1HealthBar(enemy) {
+        if (this.boss1HealthBar) {
+            this.boss1HealthBar.clear();
+            const gw = this.game.config.width;
+            const gh = this.game.config.height;
+            // Scale health bar based on screen size
+            const barHeight = Math.min(500, gh * 0.7); // 70% of height, max 500
+            const barWidth = window.isMobile ? 15 : 20;
+            const x = gw - barWidth - 10; // 10px from right edge
             const y = 50; // Y position of the health bar (50 pixels from the top)
             // Draw the background of the health bar
-            this.enemy3HealthBar.fillStyle(0xff0000);
-            this.enemy3HealthBar.fillRect(x, y, barWidth, barHeight);
+            this.boss1HealthBar.fillStyle(0xff0000);
+            this.boss1HealthBar.fillRect(x, y, barWidth, barHeight);
             // Calculate the height of the remaining health
             const healthPercentage = enemy.health / enemy.maxHealth;
             const remainingHealthHeight = barHeight * healthPercentage;
             // Draw the remaining health
-            this.enemy3HealthBar.fillStyle(0x00ff00);
-            this.enemy3HealthBar.fillRect(x, y + barHeight - remainingHealthHeight, barWidth, remainingHealthHeight);
+            this.boss1HealthBar.fillStyle(0x00ff00);
+            this.boss1HealthBar.fillRect(x, y + barHeight - remainingHealthHeight, barWidth, remainingHealthHeight);
         }
     }
-    // Second boss - Enemy Four (anemy01.gif)
-    createEnemyFour() {
-        const screenWidth = this.sys.game.config.width;
-        const enemyFour = this.enemies.create(screenWidth / 2, -100, 'enemy4');
-        if (!enemyFour) {
-            console.error('Failed to create enemy 4');
-            return;
-        }
-        enemyFour.setScale(0.8);
-        enemyFour.setVelocityY(80);
-        enemyFour.health = 188;
-        enemyFour.maxHealth = 188;
-        enemyFour.boss = true;
 
-        this.sound.play('alarmSound', { volume: 0.3 });
-
-        // Stop and start zigzag movement after 2.5 seconds
-        this.time.delayedCall(2500, () => {
-            if (enemyFour.active) {
-                enemyFour.setVelocityY(0);
-                enemyFour.setVelocityX(80);
-
-                // Zigzag pattern - reverse direction every 2 seconds
-                this.time.addEvent({
-                    delay: 2000,
-                    callback: () => {
-                        if (enemyFour.active) {
-                            enemyFour.setVelocityX(-enemyFour.body.velocity.x);
-                        }
-                    },
-                    loop: true
-                });
-            }
-        });
-
-        // Create health bar
-        this.enemy3HealthBar = this.add.graphics();
-        this.updateEnemy3HealthBar(enemyFour);
-
-        // Attack pattern 1: Diagonal sweep (different from enemy3)
-        this.time.delayedCall(3000, () => {
-            this.startEnemyFourAttack(enemyFour);
-        });
-    }
     startEnemyFourAttack(enemy) {
         if (enemy.active) {
-            // Fire diagonal sweep pattern
-            for (let angle = 30; angle <= 150; angle += 20) {
-                this.time.delayedCall((angle - 30) * 30, () => {
+            // Enhanced diagonal sweep pattern - faster and denser
+            // Fire bullets in tighter spread for more challenge
+            for (let angle = 30; angle <= 150; angle += 15) { // Changed from 20 to 15 degree spacing
+                this.time.delayedCall((angle - 30) * 20, () => { // Faster sweep (20ms vs 30ms)
                     if (enemy.active) {
                         this.createEnemyBullet(enemy.x, enemy.y + 50, angle);
                     }
                 });
             }
-            // Fire reverse sweep
-            this.time.delayedCall(600, () => {
-                for (let angle = 150; angle >= 30; angle -= 20) {
-                    this.time.delayedCall((150 - angle) * 30, () => {
+            // Fire reverse sweep faster
+            this.time.delayedCall(400, () => { // Reduced delay from 600ms to 400ms
+                for (let angle = 150; angle >= 30; angle -= 15) { // Tighter spacing
+                    this.time.delayedCall((150 - angle) * 20, () => { // Faster reverse
                         if (enemy.active) {
                             this.createEnemyBullet(enemy.x, enemy.y + 50, angle);
                         }
                     });
                 }
             });
-            // Repeat pattern
-            this.time.delayedCall(2500, () => {
+            // Add spiral component for extra challenge
+            this.time.delayedCall(800, () => {
+                if (enemy.active) {
+                    for (let i = 0; i < 8; i++) {
+                        this.createEnemyBullet(enemy.x, enemy.y + 50, i * 45);
+                    }
+                }
+            });
+            // Repeat pattern faster
+            this.time.delayedCall(2000, () => { // Reduced from 2500ms
                 this.startEnemyFourAttack(enemy);
             });
         }
@@ -1334,7 +2630,7 @@ class Example extends Phaser.Scene {
     // Third boss - Enemy Five (anemy02.gif)
     createEnemyFive() {
         const screenWidth = this.sys.game.config.width;
-        const enemyFive = this.enemies.create(screenWidth / 2, -120, 'enemy5');
+        const enemyFive = this.enemies.create(screenWidth / 2, -120, 'boss3');
         if (!enemyFive) {
             console.error('Failed to create enemy 5');
             return;
@@ -1371,8 +2667,8 @@ class Example extends Phaser.Scene {
         });
 
         // Create health bar
-        this.enemy3HealthBar = this.add.graphics();
-        this.updateEnemy3HealthBar(enemyFive);
+        this.boss1HealthBar = this.add.graphics();
+        this.updateboss1HealthBar(enemyFive);
 
         // Attack pattern: Spiral burst (unique pattern)
         this.time.delayedCall(4000, () => {
@@ -1381,18 +2677,19 @@ class Example extends Phaser.Scene {
     }
     startEnemyFiveAttack(enemy) {
         if (enemy.active) {
-            // Spiral burst pattern - fires bullets in expanding spiral
+            // Enhanced spiral burst pattern - MORE bullets, FASTER rotation
             let burstAngle = 0;
-            for (let i = 0; i < 12; i++) {
-                this.time.delayedCall(i * 100, () => {
+            for (let i = 0; i < 18; i++) { // Increased from 12 to 18 bullets
+                this.time.delayedCall(i * 80, () => { // Faster firing (80ms vs 100ms)
                     if (enemy.active) {
-                        this.createEnemyBullet(enemy.x, enemy.y + 30, burstAngle + (i * 30));
-                        this.createEnemyBullet(enemy.x, enemy.y + 30, burstAngle + (i * 30) + 180);
+                        // Fire bullets with faster rotation angle
+                        this.createEnemyBullet(enemy.x, enemy.y + 30, burstAngle + (i * 25)); // Faster spiral
+                        this.createEnemyBullet(enemy.x, enemy.y + 30, burstAngle + (i * 25) + 180);
                     }
                 });
             }
-            // Aimed shot at player
-            this.time.delayedCall(1500, () => {
+            // More frequent aimed shots at player
+            this.time.delayedCall(1000, () => { // Earlier first aimed shot
                 if (enemy.active && this.hero && this.hero.active) {
                     const angle = Phaser.Math.Angle.Between(enemy.x, enemy.y, this.hero.x, this.hero.y);
                     const angleDeg = Phaser.Math.RadToDeg(angle);
@@ -1401,8 +2698,19 @@ class Example extends Phaser.Scene {
                     this.createEnemyBullet(enemy.x + 30, enemy.y + 20, angleDeg);
                 }
             });
-            // Repeat pattern
-            this.time.delayedCall(3000, () => {
+            // Second aimed shot
+            this.time.delayedCall(1800, () => {
+                if (enemy.active && this.hero && this.hero.active) {
+                    const angle = Phaser.Math.Angle.Between(enemy.x, enemy.y, this.hero.x, this.hero.y);
+                    const angleDeg = Phaser.Math.RadToDeg(angle);
+                    // Fire 5-way spread at player
+                    for (let offset = -20; offset <= 20; offset += 10) {
+                        this.createEnemyBullet(enemy.x, enemy.y + 30, angleDeg + offset);
+                    }
+                }
+            });
+            // Repeat pattern faster
+            this.time.delayedCall(2500, () => { // Reduced from 3000ms
                 this.startEnemyFiveAttack(enemy);
             });
         }
@@ -1425,6 +2733,10 @@ class Example extends Phaser.Scene {
             powerUp.setCollideWorldBounds(true);
             powerUp.setBounce(1);
             powerUp.dropType = 'upgrade';
+            // Start blinking 2 seconds before expiration
+            this.time.delayedCall(8000, () => {
+                this.startPowerUpBlinking(powerUp);
+            });
             powerUp.expirationTimer = this.time.delayedCall(10000, () => {
                 this.expirePowerUp(powerUp);
             });
@@ -1441,6 +2753,10 @@ class Example extends Phaser.Scene {
         coin.setCollideWorldBounds(true);
         coin.setBounce(1);
         coin.dropType = 'coin';
+        // Start blinking 2 seconds before expiration
+        this.time.delayedCall(8000, () => {
+            this.startPowerUpBlinking(coin);
+        });
         coin.expirationTimer = this.time.delayedCall(10000, () => {
             this.expirePowerUp(coin);
         });
@@ -1452,45 +2768,91 @@ class Example extends Phaser.Scene {
         life.setCollideWorldBounds(true);
         life.setBounce(1);
         life.dropType = 'life';
+        // Start blinking 3 seconds before expiration (life is valuable!)
+        this.time.delayedCall(9000, () => {
+            this.startPowerUpBlinking(life);
+        });
         life.expirationTimer = this.time.delayedCall(12000, () => {
             this.expirePowerUp(life);
         });
     }
     expirePowerUp(powerUp) {
         if (powerUp.active) {
-            powerUp.destroy();
-            if (powerUp.dropType === 'upgrade') {
-                this.starsCollectedBeforeExpire = 0; // Reset counter only for upgrade stars
-            }
+            // Fade out effect over 1 second before destroying
+            this.tweens.add({
+                targets: powerUp,
+                alpha: 0,
+                duration: 1000,
+                ease: 'Power2',
+                onComplete: () => {
+                    if (powerUp.active) {
+                        powerUp.destroy();
+                        if (powerUp.dropType === 'upgrade') {
+                            this.starsCollectedBeforeExpire = 0; // Reset counter only for upgrade stars
+                        }
+                    }
+                }
+            });
+        }
+    }
+
+    // Start blinking effect to warn player before expiration
+    startPowerUpBlinking(powerUp) {
+        if (powerUp.active && !powerUp.isBlinking) {
+            powerUp.isBlinking = true;
+            this.tweens.add({
+                targets: powerUp,
+                alpha: 0.3,
+                duration: 200,
+                yoyo: true,
+                repeat: 5, // Blink 5 times over ~2 seconds
+                onComplete: () => {
+                    if (powerUp.active) {
+                        powerUp.alpha = 1; // Reset alpha before fade out
+                    }
+                }
+            });
         }
     }
     showWinScreen() {
         if (!this.gameWon) {
-            // Check if there are more levels
-            if (this.currentLevel < 3) {
-                // Advance to next level
-                this.currentLevel++;
-                this.enemy3Destroyed = false; // Reset for next boss
+            // Check if there are more levels (9 total)
+            if (this.currentLevel < 9) {
+                // Properly destroy health bar from previous boss
+                if (this.boss1HealthBar) {
+                    this.boss1HealthBar.destroy();
+                    this.boss1HealthBar = null;
+                }
 
-                // Show level transition message
-                const levelText = this.add.text(400, 300, `Level ${this.currentLevel}!`, {
-                    fontSize: '64px',
+                // Preserve current state for next level
+                this.registry.set('currentLevel', this.currentLevel + 1);
+                this.registry.set('preservedScore', this.score);
+                this.registry.set('preservedWeaponPower', this.hero.weaponPower);
+                this.registry.set('preservedLives', this.playerLives);
+                this.registry.set('preservedStarCounter', this.starCounter);
+                this.registry.set('preservedTransformed', this.heroTransformed);
+                this.registry.set('levelProgression', true);
+
+                // Show level transition message - responsive
+                const gw = this.game.config.width;
+                const gh = this.game.config.height;
+                const centerX = gw / 2;
+                const centerY = gh / 2;
+                const isMobile = window.isMobile;
+
+                const levelText = this.add.text(centerX, centerY, `Level ${this.currentLevel + 1}!`, {
+                    fontSize: isMobile ? '48px' : '64px',
                     fill: '#ffff00'
                 }).setOrigin(0.5).setDepth(1001);
 
-                this.add.text(400, 360, 'Novo Chefe Chegando!', {
-                    fontSize: '32px',
+                const bossText = this.add.text(centerX, centerY + (isMobile ? 45 : 60), 'Preparando Nova Fase!', {
+                    fontSize: isMobile ? '20px' : '32px',
                     fill: '#fff'
                 }).setOrigin(0.5).setDepth(1001);
 
-                // Fade out and spawn next boss
-                this.time.delayedCall(2000, () => {
-                    levelText.destroy();
-                    if (this.currentLevel === 2) {
-                        this.createEnemyFour();
-                    } else if (this.currentLevel === 3) {
-                        this.createEnemyFive();
-                    }
+                // Restart scene after showing message
+                this.time.delayedCall(3000, () => {
+                    this.scene.restart();
                 });
                 return;
             }
@@ -1498,42 +2860,70 @@ class Example extends Phaser.Scene {
             // Final victory - all bosses defeated
             this.gameWon = true;
             this.sound.stopAll();
-            this.sound.play('brassBandMusic', {
+            this.sound.play('finalyMusic', {
                 loop: true,
                 volume: 0.7
             });
-            const overlay = this.add.rectangle(400, 300, 800, 600, 0x000000, 0.7);
+
+            const gw = this.game.config.width;
+            const gh = this.game.config.height;
+            const centerX = gw / 2;
+            const centerY = gh / 2;
+            const isMobile = window.isMobile;
+
+            // Responsive font sizes
+            const titleSize = isMobile ? '36px' : '64px';
+            const subtitleSize = isMobile ? '20px' : '32px';
+            const textSize = isMobile ? '16px' : '28px';
+            const smallTextSize = isMobile ? '14px' : '24px';
+
+            // Responsive vertical spacing
+            const lineSpacing = isMobile ? 35 : 60;
+            let yPos = centerY - (isMobile ? 80 : 100);
+
+            const overlay = this.add.rectangle(centerX, centerY, gw, gh, 0x000000, 0.7);
             overlay.setDepth(1000);
-            this.add.text(400, 280, 'Você Venceu!', {
-                fontSize: '64px',
+            this.add.text(centerX, yPos, 'Você Venceu!', {
+                fontSize: titleSize,
                 fill: '#fff'
             }).setOrigin(0.5).setDepth(1001);
-            this.add.text(400, 340, 'Todos os Chefes Derrotados!', {
-                fontSize: '32px',
+            yPos += lineSpacing;
+            this.add.text(centerX, yPos, 'Todos os Chefes Derrotados!', {
+                fontSize: subtitleSize,
                 fill: '#00ff00'
             }).setOrigin(0.5).setDepth(1001);
-            this.add.text(400, 400, `Sua Pontuação: ${this.score}`, {
-                fontSize: '28px',
+            yPos += lineSpacing;
+            this.add.text(centerX, yPos, `Sua Pontuação: ${this.score}`, {
+                fontSize: textSize,
                 fill: '#fff'
             }).setOrigin(0.5).setDepth(1001);
+            yPos += lineSpacing;
             if (this.score < 15000) {
-                this.add.text(400, 450, 'Consegue superar 15.000 pontos?', {
-                    fontSize: '24px',
+                this.add.text(centerX, yPos, 'Consegue superar 15.000 pontos?', {
+                    fontSize: smallTextSize,
                     fill: '#ffff00'
                 }).setOrigin(0.5).setDepth(1001);
             } else {
-                this.add.text(400, 450, 'Você superou 15.000 pontos!!', {
-                    fontSize: '24px',
+                this.add.text(centerX, yPos, 'Você superou 15.000 pontos!!', {
+                    fontSize: smallTextSize,
                     fill: '#00ff00'
                 }).setOrigin(0.5).setDepth(1001);
             }
-            this.add.text(400, 500, 'Pressione qualquer tecla para reiniciar', {
-                fontSize: '24px',
+            yPos += lineSpacing;
+            this.add.text(centerX, yPos, isMobile ? 'Toque para reiniciar' : 'Pressione qualquer tecla para reiniciar', {
+                fontSize: smallTextSize,
                 fill: '#fff'
             }).setOrigin(0.5).setDepth(1001);
+
+            // Support both keyboard and touch for restart
             this.input.keyboard.once('keydown', () => {
                 this.scene.start('IntroScreen');
             });
+            if (isMobile) {
+                this.input.once('pointerdown', () => {
+                    this.scene.start('IntroScreen');
+                });
+            }
         }
     }
 
@@ -1573,11 +2963,11 @@ class Example extends Phaser.Scene {
             this.unlockAchievement('fallen');
         }
         // Remove the Pacifist check from here as it's now handled in the update method
-        // Check for Knucklehead achievement when the boss (enemy 3) is created
-        if (this.enemies.getChildren().some(enemy => enemy.texture.key === 'enemy3') && !this.weaponUpgraded) {
+        // Check for Knucklehead achievement when any boss is created
+        if (this.enemies.getChildren().some(enemy => this.isBossEnemy(enemy)) && !this.weaponUpgraded) {
             this.unlockAchievement('knucklehead');
         }
-        if (this.enemy3Destroyed) {
+        if (this.boss1Destroyed) {
             this.unlockAchievement('bossKill');
             // Check for Star Dancer achievement
             if (!this.playerHit) {
@@ -1641,15 +3031,19 @@ class Example extends Phaser.Scene {
     }
     showAchievementNotification(key) {
         const achievementName = this.getAchievementName(key);
-        const notification = this.add.text(400, 550, `Conquista desbloqueada: ${achievementName}`, {
-            fontSize: '24px',
+        const gw = this.game.config.width;
+        const gh = this.game.config.height;
+        const isMobile = window.isMobile;
+
+        const notification = this.add.text(gw / 2, gh - 30, `Conquista desbloqueada: ${achievementName}`, {
+            fontSize: isMobile ? '14px' : '24px',
             fill: '#ffff00',
             backgroundColor: '#000000',
             padding: {
-                left: 15,
-                right: 15,
-                top: 10,
-                bottom: 10
+                left: isMobile ? 8 : 15,
+                right: isMobile ? 8 : 15,
+                top: isMobile ? 5 : 10,
+                bottom: isMobile ? 5 : 10
             }
         }).setOrigin(0.5, 1);
         notification.setDepth(1000); // Ensure it appears on top of other game elements
@@ -1802,25 +3196,53 @@ class Level4 extends Phaser.Scene {
         bullet.setTint(0xffff00);
     }
 }
+
+// ============================================
+// MOBILE DETECTION AND DYNAMIC SIZING
+// ============================================
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+let gameWidth, gameHeight;
+
+if (isMobile) {
+    // Use window size as base for mobile
+    const screenWidth = window.innerWidth;
+    const screenHeight = window.innerHeight;
+
+    // Maintain 9:16 aspect ratio (vertical) for mobile
+    const aspectRatio = 9 / 16;
+
+    if (screenWidth / screenHeight < aspectRatio) {
+        // Screen is narrower than 9:16
+        gameWidth = screenWidth;
+        gameHeight = screenWidth / aspectRatio;
+    } else {
+        // Screen is wider than 9:16
+        gameHeight = screenHeight;
+        gameWidth = screenHeight * aspectRatio;
+    }
+
+    // Ensure minimum quality (not less than 360x640)
+    gameWidth = Math.max(360, Math.round(gameWidth));
+    gameHeight = Math.max(640, Math.round(gameHeight));
+} else {
+    // Desktop: maintain traditional 800x600
+    gameWidth = 800;
+    gameHeight = 600;
+}
+
 const config = {
     type: Phaser.AUTO,
-    width: 800,
-    height: 600,
+    width: gameWidth,
+    height: gameHeight,
     parent: 'game-container',
     backgroundColor: '#000000',
     scale: {
         mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH,
-        width: 800,
-        height: 600,
-        min: {
-            width: 400,
-            height: 300
-        },
-        max: {
-            width: 1600,
-            height: 1200
-        }
+    },
+    input: {
+        activePointers: 3, // Support for multiple touch points
     },
     physics: {
         default: 'arcade',
@@ -1832,24 +3254,32 @@ const config = {
     scene: [IntroScreen, Example]
 };
 
+// Export isMobile for use in scenes
+window.isMobile = isMobile;
+
 const game = new Phaser.Game(config);
 class AchievementsScreen extends Phaser.Scene {
     constructor() {
         super('AchievementsScreen');
     }
     create() {
-        this.add.rectangle(400, 300, 800, 600, 0x000000);
+        const gw = this.game.config.width;
+        const gh = this.game.config.height;
+        const centerX = gw / 2;
+        const isMobile = window.isMobile;
 
-        const backButton = this.add.text(50, 40, 'Back', {
-            fontSize: '24px',
+        this.add.rectangle(centerX, gh / 2, gw, gh, 0x000000);
+
+        const backButton = this.add.text(20, 30, 'Voltar', {
+            fontSize: isMobile ? '18px' : '24px',
             fill: '#ffffff'
         }).setOrigin(0, 0.5).setInteractive();
         backButton.on('pointerdown', () => {
             this.scene.start('IntroScreen');
         });
 
-        this.add.text(400, 40, 'Achievements', {
-            fontSize: '36px',
+        this.add.text(centerX, 30, 'Conquistas', {
+            fontSize: isMobile ? '24px' : '36px',
             fill: '#ffffff'
         }).setOrigin(0.5);
 
@@ -1923,20 +3353,32 @@ class AchievementsScreen extends Phaser.Scene {
             description: 'Mate 6.000 inimigos em todos os jogos'
         }];
 
-        let yPos = 80; // Changed from 90 to 80
+        const fontSize = isMobile ? '11px' : '18px';
+        const lineHeight = isMobile ? 22 : 30;
+        let yPos = 60;
+
         achievements.forEach(achievement => {
             const achieved = localStorage.getItem(achievement.key) === 'true';
             const color = achieved ? '#00ff00' : '#ff0000';
-            const status = achieved ? 'Achieved' : 'Not Achieved';
-            this.add.text(50, yPos, `${achievement.name}: ${achievement.description}`, {
-                fontSize: '18px',
-                fill: color
-            });
-            this.add.text(750, yPos, status, {
-                fontSize: '18px',
-                fill: color
-            }).setOrigin(1, 0);
-            yPos += 30;
+            const status = achieved ? '✓' : '✗';
+
+            // Mobile: show name + status on one line, description below if space allows
+            if (isMobile) {
+                this.add.text(15, yPos, `${status} ${achievement.name}`, {
+                    fontSize: fontSize,
+                    fill: color
+                });
+            } else {
+                this.add.text(50, yPos, `${achievement.name}: ${achievement.description}`, {
+                    fontSize: fontSize,
+                    fill: color
+                });
+                this.add.text(gw - 50, yPos, achieved ? 'Achieved' : 'Not Achieved', {
+                    fontSize: fontSize,
+                    fill: color
+                }).setOrigin(1, 0);
+            }
+            yPos += lineHeight;
         });
     }
 }
