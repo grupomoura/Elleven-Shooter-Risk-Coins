@@ -627,7 +627,7 @@ class Example extends Phaser.Scene {
             this.doubleEnemy2Spawn = true;
         }, [], this);
         // Create main boss - 150s for normal levels, 300s for Level 9 (final level)
-        const bossSpawnTime = this.currentLevel === 9 ? 5000 : 150000;
+        const bossSpawnTime = this.currentLevel === 9 ? 300000 : 150000;
         this.time.delayedCall(bossSpawnTime, this.createEnemyThree, [], this);
 
         // ============================================
