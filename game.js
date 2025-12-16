@@ -1,10 +1,140 @@
+class PreloadScene extends Phaser.Scene {
+    constructor() {
+        super('PreloadScene');
+    }
+
+    preload() {
+        // ============================================
+        // LOADING SCREEN (ProgressBar)
+        // ============================================
+        const width = this.cameras.main.width;
+        const height = this.cameras.main.height;
+
+        // Background for loading screen
+        this.add.rectangle(width / 2, height / 2, width, height, 0x000000);
+
+        const progressBar = this.add.graphics();
+        const progressBox = this.add.graphics();
+        progressBox.fillStyle(0x222222, 0.8);
+        progressBox.fillRect(width / 2 - 160, height / 2 - 25, 320, 50);
+
+        const loadingText = this.make.text({
+            x: width / 2,
+            y: height / 2 - 50,
+            text: 'Carregando...',
+            style: {
+                font: '20px monospace',
+                fill: '#ffffff'
+            }
+        });
+        loadingText.setOrigin(0.5, 0.5);
+
+        const percentText = this.make.text({
+            x: width / 2,
+            y: height / 2,
+            text: '0%',
+            style: {
+                font: '18px monospace',
+                fill: '#ffffff'
+            }
+        });
+        percentText.setOrigin(0.5, 0.5);
+
+        const assetText = this.make.text({
+            x: width / 2,
+            y: height / 2 + 50,
+            text: '',
+            style: {
+                font: '18px monospace',
+                fill: '#ffffff'
+            }
+        });
+        assetText.setOrigin(0.5, 0.5);
+
+        this.load.on('progress', function (value) {
+            percentText.setText(parseInt(value * 100) + '%');
+            progressBar.clear();
+            progressBar.fillStyle(0x00ff00, 1);
+            progressBar.fillRect(width / 2 - 150, height / 2 - 15, 300 * value, 30);
+        });
+
+        this.load.on('fileprogress', function (file) {
+            assetText.setText('Carregando: ' + file.key);
+        });
+
+        this.load.on('complete', function () {
+            progressBar.destroy();
+            progressBox.destroy();
+            loadingText.destroy();
+            percentText.destroy();
+            assetText.destroy();
+        });
+
+        // ============================================
+        // ASSET LOADING
+        // ============================================
+
+        // From IntroScreen
+        this.load.audio('introMusic', 'assets/intro.mp3');
+
+        // From Example Scene (Main Game)
+        this.load.spritesheet('hero', 'assets/spaceship_spritesheet.png', { frameWidth: 80, frameHeight: 80 });
+        this.load.image('max_hero', 'assets/max_hero.gif');
+        this.load.image('Cannon_bullet', 'assets/cannom_bullet.png');
+        this.load.image('enemy1', 'assets/enemy1.png');
+        this.load.image('enemy2', 'assets/enemy2.png');
+        this.load.image('enemy3', 'assets/enemy3.png'); // Sub-chief enemy (appears from level 2)
+        this.load.image('boss1', 'assets/boss1.png');
+        this.load.image('background', 'assets/background.jpg');
+        this.load.image('background2', 'assets/background02.jpg');
+        this.load.image('background3', 'assets/background03.jpg');
+        this.load.image('star', 'assets/bitcoin.png');
+        // New assets for coins and life
+        this.load.image('coin1', 'assets/coin1.png');
+        this.load.image('coin2', 'assets/coin2.png');
+        this.load.image('coin3', 'assets/coin3.png');
+        this.load.image('life', 'assets/life.png');
+        // Boss sprites for all 8 levels
+        this.load.image('boss2', 'assets/boss2.png');
+        this.load.image('boss3', 'assets/boss3.png');
+        this.load.image('boss4', 'assets/boss4.png');
+        this.load.image('boss5', 'assets/boss5.png');
+        this.load.image('boss6', 'assets/boss6.png');
+        this.load.image('boss7', 'assets/boss7.png');
+        this.load.image('boss8', 'assets/boss8.png');
+        // Final boss spritesheet (4x4 grid, 160x160 per frame)
+        this.load.spritesheet('finalboss', 'assets/finalboss_spritesheet.png', {
+            frameWidth: 160,
+            frameHeight: 160
+        });
+        // Level-based background music
+        this.load.audio('level1-3Music', 'assets/level1-3.mp3');
+        this.load.audio('level4-6Music', 'assets/level4-6.mp3');
+        this.load.audio('level7-8Music', 'assets/level7-8.mp3');
+        this.load.audio('finalLevelMusic', 'assets/finallevel.mp3');
+        this.load.audio('finalBossMusic', 'assets/finalboss.mp3');
+        this.load.audio('boomSound', 'assets/boom.mp3');
+        this.load.audio('hitSound', 'assets/hit.mp3');
+        this.load.audio('shieldSound', 'assets/shield.mp3');
+        this.load.audio('bellSound', 'assets/bell.mp3');
+        this.load.audio('lowBellSound', 'assets/low_bell.mp3');
+        this.load.audio('alarmSound', 'assets/alarm.mp3');
+        this.load.audio('finalyMusic', 'assets/finaly.mp3');
+        this.load.audio('cashSound', 'assets/cash_10.mp3');
+        this.load.audio('lifeSound', 'assets/life.mp3');
+    }
+
+    create() {
+        this.scene.start('IntroScreen');
+    }
+}
+
 class IntroScreen extends Phaser.Scene {
     constructor() {
         super('IntroScreen');
     }
     preload() {
-        // Load intro music
-        this.load.audio('introMusic', 'assets/intro.mp3');
+        // Assets are now loaded in PreloadScene
     }
     create() {
         // Stop any previous sounds and play intro music
@@ -155,55 +285,8 @@ class Example extends Phaser.Scene {
         });
 
         // ============================================
-        // MOBILE TOUCH CONTROLS
+        // INPUT HANDLER: Logic moved to update() loop for smoother control
         // ============================================
-        if (window.isMobile) {
-            // Track if player is touching the screen
-            this.isTouching = false;
-
-            // Touch start - begin tracking and auto-fire
-            this.input.on('pointerdown', (pointer) => {
-                if (this.gameOver) {
-                    this.scene.restart();
-                    return;
-                }
-                this.isTouching = true;
-                // Move hero to touch position
-                if (this.hero && this.hero.active) {
-                    this.hero.x = Phaser.Math.Clamp(pointer.x, 40, this.game.config.width - 40);
-                    this.hero.y = Phaser.Math.Clamp(pointer.y, this.game.config.height * 0.3, this.game.config.height - 40);
-                }
-            });
-
-            // Touch move - hero follows finger
-            this.input.on('pointermove', (pointer) => {
-                if (this.hero && this.hero.active && pointer.isDown) {
-                    this.hero.x = Phaser.Math.Clamp(pointer.x, 40, this.game.config.width - 40);
-                    this.hero.y = Phaser.Math.Clamp(pointer.y, this.game.config.height * 0.3, this.game.config.height - 40);
-                }
-            });
-
-            // Touch end - stop auto-fire
-            this.input.on('pointerup', () => {
-                this.isTouching = false;
-            });
-        } else {
-            // ============================================
-            // DESKTOP MOUSE CONTROLS (unchanged)
-            // ============================================
-            this.input.on('pointermove', (pointer) => {
-                if (this.hero && this.hero.active) {
-                    this.hero.x = Phaser.Math.Clamp(pointer.x, 0, this.game.config.width);
-                }
-            });
-
-            // Add click to restart
-            this.input.on('pointerdown', () => {
-                if (this.gameOver) {
-                    this.scene.restart();
-                }
-            });
-        }
     }
     initTotalKillCount() {
         let totalKills = localStorage.getItem('totalEnemyKills');
@@ -220,54 +303,7 @@ class Example extends Phaser.Scene {
         return totalKills;
     }
     preload() {
-        // Load hero spritesheet (4x4 grid, 80x80 per frame)
-        this.load.spritesheet('hero', 'assets/spaceship_spritesheet.png', {
-            frameWidth: 80,
-            frameHeight: 80
-        });
-        this.load.image('max_hero', 'assets/max_hero.gif');
-        this.load.image('Cannon_bullet', 'assets/cannom_bullet.png');
-        this.load.image('enemy1', 'assets/enemy1.png');
-        this.load.image('enemy2', 'assets/enemy2.png');
-        this.load.image('enemy3', 'assets/enemy3.png'); // Sub-chief enemy (appears from level 2)
-        this.load.image('boss1', 'assets/boss1.png');
-        this.load.image('background', 'assets/background.jpg');
-        this.load.image('background2', 'assets/background02.jpg');
-        this.load.image('background3', 'assets/background03.jpg');
-        this.load.image('star', 'assets/bitcoin.png');
-        // New assets for coins and life
-        this.load.image('coin1', 'assets/coin1.png');
-        this.load.image('coin2', 'assets/coin2.png');
-        this.load.image('coin3', 'assets/coin3.png');
-        this.load.image('life', 'assets/life.png');
-        // Boss sprites for all 8 levels
-        this.load.image('boss2', 'assets/boss2.png');
-        this.load.image('boss3', 'assets/boss3.png');
-        this.load.image('boss4', 'assets/boss4.png');
-        this.load.image('boss5', 'assets/boss5.png');
-        this.load.image('boss6', 'assets/boss6.png');
-        this.load.image('boss7', 'assets/boss7.png');
-        this.load.image('boss8', 'assets/boss8.png');
-        // Final boss spritesheet (4x4 grid, 160x160 per frame)
-        this.load.spritesheet('finalboss', 'assets/finalboss_spritesheet.png', {
-            frameWidth: 160,
-            frameHeight: 160
-        });
-        // Level-based background music
-        this.load.audio('level1-3Music', 'assets/level1-3.mp3');
-        this.load.audio('level4-6Music', 'assets/level4-6.mp3');
-        this.load.audio('level7-8Music', 'assets/level7-8.mp3');
-        this.load.audio('finalLevelMusic', 'assets/finallevel.mp3');
-        this.load.audio('finalBossMusic', 'assets/finalboss.mp3');
-        this.load.audio('boomSound', 'assets/boom.mp3');
-        this.load.audio('hitSound', 'assets/hit.mp3');
-        this.load.audio('shieldSound', 'assets/shield.mp3');
-        this.load.audio('bellSound', 'assets/bell.mp3');
-        this.load.audio('lowBellSound', 'assets/low_bell.mp3');
-        this.load.audio('alarmSound', 'assets/alarm.mp3');
-        this.load.audio('finalyMusic', 'assets/finaly.mp3');
-        this.load.audio('cashSound', 'assets/cash_10.mp3');
-        this.load.audio('lifeSound', 'assets/life.mp3');
+        // Assets are loaded in PreloadScene
     }
     create() {
         // Reset UI elements that need to be recreated on scene restart
@@ -448,13 +484,35 @@ class Example extends Phaser.Scene {
         this.cursors = this.input.keyboard.createCursorKeys();
         this.wasdKeys = this.input.keyboard.addKeys('W,A,S,D');
 
-        // Set up key combination for Shift + Y
-        this.input.keyboard.on('keydown-Y', (event) => {
-            if (event.shiftKey) {
-                this.permanentInvulnerability = !this.permanentInvulnerability;
-                console.log(`Permanent invulnerability ${this.permanentInvulnerability ? 'activated' : 'deactivated'}`);
-            }
-        });
+        // ============================================
+        // DESKTOP CONTROL MODE (Keyboard by default)
+        // ============================================
+        if (!window.isMobile) {
+            // Retrieve persisted input mode or default to 'KEYBOARD'
+            this.inputMode = this.registry.get('inputMode') || 'KEYBOARD'; // Options: 'KEYBOARD', 'MOUSE'
+
+            const initialColor = this.inputMode === 'KEYBOARD' ? '#00ff00' : '#00ffff';
+
+            // Instruction Text
+            this.controlModeText = this.add.text(16, 80, `Controls: ${this.inputMode} (Press C to switch)`, {
+                fontSize: '10px',
+                fill: initialColor
+            });
+
+            // Toggle Listener
+            this.input.keyboard.on('keydown-C', () => {
+                this.inputMode = this.inputMode === 'KEYBOARD' ? 'MOUSE' : 'KEYBOARD';
+                // Persist the new mode
+                this.registry.set('inputMode', this.inputMode);
+
+                const color = this.inputMode === 'KEYBOARD' ? '#00ff00' : '#00ffff';
+                this.controlModeText.setText(`Controls: ${this.inputMode} (Press C to switch)`);
+                this.controlModeText.setColor(color);
+                console.log(`Input Mode switched to: ${this.inputMode}`);
+            });
+        }
+
+        // ============================================
 
         // ============================================
         // TEMPORARY: Level change shortcuts for testing
@@ -502,7 +560,7 @@ class Example extends Phaser.Scene {
         // Create an instance of enemy 1
         this.createEnemyOne();
         // Add score text - responsive font size
-        const uiFontSize = window.isMobile ? '20px' : '32px';
+        const uiFontSize = window.isMobile ? '20px' : '28px';
         this.scoreText = this.add.text(16, 16, 'Score: 0', {
             fontSize: uiFontSize,
             fill: '#fff'
@@ -1453,234 +1511,253 @@ class Example extends Phaser.Scene {
         });
         if (!this.heroDestroyed) {
             if (this.hero && this.hero.active) {
-                const speed = 400; // Doubled the speed from 200 to 400
+                const speed = 400;
                 // Reset velocity
                 this.hero.setVelocity(0);
+
                 // Fire bullet continuously
                 if (time > this.lastFired) {
                     this.fireBullet();
                     this.lastFired = time + this.fireDelay;
                 }
-                // Horizontal movement
-                if (this.cursors.left.isDown || this.wasdKeys.A.isDown) {
-                    this.hero.setVelocityX(-speed);
-                } else if (this.cursors.right.isDown || this.wasdKeys.D.isDown) {
-                    this.hero.setVelocityX(speed);
-                }
-                // Vertical movement
-                if (this.cursors.up.isDown || this.wasdKeys.W.isDown) {
-                    this.hero.setVelocityY(-speed);
-                } else if (this.cursors.down.isDown || this.wasdKeys.S.isDown) {
-                    this.hero.setVelocityY(speed);
-                }
 
-                // ============================================
-                // HERO ANIMATION BASED ON MOVEMENT
-                // Only apply if not transformed (using spritesheet)
-                // ============================================
-                if (!this.heroTransformed && this.hero.anims) {
-                    const velocityY = this.hero.body.velocity.y;
-                    const velocityX = this.hero.body.velocity.x;
-
-                    if (velocityY < -100) {
-                        // Moving up fast - maximum thrust
-                        if (this.hero.anims.currentAnim?.key !== 'hero_thrust_max') {
-                            this.hero.play('hero_thrust_max');
-                        }
-                    } else if (velocityY < 0) {
-                        // Moving up slowly - medium thrust
-                        if (this.hero.anims.currentAnim?.key !== 'hero_thrust_medium') {
-                            this.hero.play('hero_thrust_medium');
-                        }
-                    } else if (velocityY > 100) {
-                        // Moving down fast - idle (no thrust)
-                        if (this.hero.anims.currentAnim?.key !== 'hero_idle') {
-                            this.hero.play('hero_idle');
-                        }
-                    } else if (velocityY > 0) {
-                        // Moving down slowly - light thrust
-                        if (this.hero.anims.currentAnim?.key !== 'hero_thrust_light') {
-                            this.hero.play('hero_thrust_light');
-                        }
-                    } else if (Math.abs(velocityX) > 0) {
-                        // Moving horizontally only - medium thrust
-                        if (this.hero.anims.currentAnim?.key !== 'hero_thrust_medium') {
-                            this.hero.play('hero_thrust_medium');
-                        }
-                    } else {
-                        // Stationary - medium thrust (hovering)
-                        if (this.hero.anims.currentAnim?.key !== 'hero_thrust_medium') {
-                            this.hero.play('hero_thrust_medium');
-                        }
+                // --- KEYBOARD CONTROLS (Desktop Only) ---
+                if (!window.isMobile && this.inputMode === 'KEYBOARD') {
+                    if (this.cursors.left.isDown || this.wasdKeys.A.isDown) {
+                        this.hero.setVelocityX(-speed);
+                    } else if (this.cursors.right.isDown || this.wasdKeys.D.isDown) {
+                        this.hero.setVelocityX(speed);
+                    }
+                    if (this.cursors.up.isDown || this.wasdKeys.W.isDown) {
+                        this.hero.setVelocityY(-speed);
+                    } else if (this.cursors.down.isDown || this.wasdKeys.S.isDown) {
+                        this.hero.setVelocityY(speed);
                     }
                 }
-                // ============================================
+
+                // --- TOUCH / MOUSE CONTROLS ---
+                const pointer = this.input.activePointer;
+                const isTouch = pointer.pointerType === 'touch' || window.isMobile;
+                const isMouseMode = !window.isMobile && this.inputMode === 'MOUSE';
+
+                if (isTouch) {
+                    // Mobile/Touch: Follow finger only if touching
+                    if (pointer.isDown) {
+                        this.hero.x = Phaser.Math.Clamp(pointer.x, 40, gameWidth - 40);
+                        this.hero.y = Phaser.Math.Clamp(pointer.y, 40, gameHeight - 40);
+                    }
+                } else if (isMouseMode) {
+                    // Desktop Mouse Mode: Follow mouse X and Y
+                    this.hero.x = Phaser.Math.Clamp(pointer.x, 0, gameWidth);
+                    this.hero.y = Phaser.Math.Clamp(pointer.y, 0, gameHeight);
+                }
             }
+            // ============================================
+            // HERO ANIMATION BASED ON MOVEMENT
+            // Only apply if not transformed (using spritesheet)
+            // ============================================
+            if (!this.heroTransformed && this.hero.anims) {
+                const velocityY = this.hero.body.velocity.y;
+                const velocityX = this.hero.body.velocity.x;
 
-            // Handle boss (any type) horizontal movement
-            this.enemies.getChildren().forEach((enemy) => {
-                if (this.isBossEnemy(enemy)) {
-                    if (enemy.health <= enemy.maxHealth / 2 && !enemy.isMovingHorizontally) {
-                        enemy.isMovingHorizontally = true;
-                        enemy.setVelocityX(-enemy.horizontalSpeed);
+                if (velocityY < -100) {
+                    // Moving up fast - maximum thrust
+                    if (this.hero.anims.currentAnim?.key !== 'hero_thrust_max') {
+                        this.hero.play('hero_thrust_max');
                     }
-                    // Removed world bounds check and velocity reversal
+                } else if (velocityY < 0) {
+                    // Moving up slowly - medium thrust
+                    if (this.hero.anims.currentAnim?.key !== 'hero_thrust_medium') {
+                        this.hero.play('hero_thrust_medium');
+                    }
+                } else if (velocityY > 100) {
+                    // Moving down fast - idle (no thrust)
+                    if (this.hero.anims.currentAnim?.key !== 'hero_idle') {
+                        this.hero.play('hero_idle');
+                    }
+                } else if (velocityY > 0) {
+                    // Moving down slowly - light thrust
+                    if (this.hero.anims.currentAnim?.key !== 'hero_thrust_light') {
+                        this.hero.play('hero_thrust_light');
+                    }
+                } else if (Math.abs(velocityX) > 0) {
+                    // Moving horizontally only - medium thrust
+                    if (this.hero.anims.currentAnim?.key !== 'hero_thrust_medium') {
+                        this.hero.play('hero_thrust_medium');
+                    }
+                } else {
+                    // Stationary - medium thrust (hovering)
+                    if (this.hero.anims.currentAnim?.key !== 'hero_thrust_medium') {
+                        this.hero.play('hero_thrust_medium');
+                    }
                 }
-            });
-            // Check for hero-enemy collisions
-            if (this.hero && this.hero.active) {
-                this.enemies.getChildren().forEach((enemy) => {
-                    if (enemy.active) {
-                        const dx = this.hero.x - enemy.x;
-                        const dy = this.hero.y - enemy.y;
-                        const distance = Math.sqrt(dx * dx + dy * dy);
-                        if (!this.hero.isInvincible) {
-                            if ((enemy.texture.key === 'enemy1' && distance < 50) ||
-                                (enemy.texture.key === 'enemy2' && distance < 20) ||
-                                (enemy.texture.key === 'enemy3' && !enemy.isSubBoss && distance < 25)) {
-                                this.damageHero();
-                            }
-                        }
-                    }
-                });
             }
-            // Check for bullet-enemy collisions and off-screen enemies
-            this.enemies.getChildren().forEach((enemy) => {
-                // Protect bosses AND sub-boss from off-screen destruction (they spawn at y=-100 or y=-50)
-                // Regular enemy3 is NOT protected (only isSubBoss enemies are protected)
-                const isProtectedEnemy = this.isBossEnemy(enemy) || enemy.isSubBoss;
-                if (!isProtectedEnemy && (enemy.y > gameHeight || enemy.y < 0 || enemy.x > gameWidth || enemy.x < 0)) {
-                    if (enemy.texture.key === 'enemy2' && this.enemy2BounceBehavior && Math.random() < (this.enemy2BounceChance || 0.3)) {
-                        // Check if enough time has passed since the last bounce
-                        if (time - enemy.lastBounceTime >= 500) { // 500 ms cooldown
-                            // Bounce logic for enemy 2
-                            if (enemy.y > gameHeight || enemy.y < 0) {
-                                enemy.setVelocityY(-enemy.body.velocity.y);
-                                // Flip sprite vertically when changing vertical direction  
-                                enemy.setFlipY(!enemy.flipY);
-                            }
-                            if (enemy.x > gameWidth || enemy.x < 0) {
-                                enemy.setVelocityX(-enemy.body.velocity.x);
-                            }
-                            // Ensure the enemy stays within bounds
-                            enemy.x = Phaser.Math.Clamp(enemy.x, 0, gameWidth);
-                            enemy.y = Phaser.Math.Clamp(enemy.y, 0, gameHeight);
-                            // Update the last bounce time
-                            enemy.lastBounceTime = time;
-                        }
-                    } else {
-                        // Destroy both enemy 1 and enemy 2 (when not bouncing) if they go off-screen
-                        enemy.destroy();
-                    }
+            // ============================================
+        }
+
+        // Handle boss (any type) horizontal movement
+        this.enemies.getChildren().forEach((enemy) => {
+            if (this.isBossEnemy(enemy)) {
+                if (enemy.health <= enemy.maxHealth / 2 && !enemy.isMovingHorizontally) {
+                    enemy.isMovingHorizontally = true;
+                    enemy.setVelocityX(-enemy.horizontalSpeed);
                 }
-                this.playerBullets.getChildren().forEach((bullet) => {
-                    const dx = enemy.x - bullet.x;
-                    const dy = enemy.y - bullet.y;
+                // Removed world bounds check and velocity reversal
+            }
+        });
+        // Check for hero-enemy collisions
+        if (this.hero && this.hero.active) {
+            this.enemies.getChildren().forEach((enemy) => {
+                if (enemy.active) {
+                    const dx = this.hero.x - enemy.x;
+                    const dy = this.hero.y - enemy.y;
                     const distance = Math.sqrt(dx * dx + dy * dy);
-
-                    // Determine hit distance based on enemy type
-                    // Use enemy-specific hitDistance if defined (bosses and mini-boss)
-                    // Otherwise use default values based on texture key
-                    let hitDistance = enemy.hitDistance || 50; // Default for regular enemies
-                    if (this.isBossEnemy(enemy) && !enemy.hitDistance) {
-                        hitDistance = 110; // Fallback for bosses without hitDistance
-                    }
-                    if (distance < hitDistance) {
-                        this.createBulletExplosion(bullet.x, bullet.y);
-                        bullet.destroy();
-                        enemy.health -= 1; // Always decrease enemy health by 1
-                        this.playHitSound(); // Play hit sound
-                        // Update health bar for any boss (all 8 levels)
-                        if (this.isBossEnemy(enemy)) {
-                            this.updateboss1HealthBar(enemy);
-                        }
-                        if (enemy.health <= 0) {
-                            const enemyX = enemy.x;
-                            const enemyY = enemy.y;
-                            const enemyType = enemy.texture.key;
-                            // Store flags before destroying enemy
-                            const wasSubBoss = enemy.isSubBoss || false;
-                            const wasRegularEnemy3 = enemy.isRegularEnemy3 || false;
-                            const wasScoreValue = enemy.scoreValue;
-                            enemy.destroy();
-                            this.createExplosion(enemyX, enemyY, enemyType);
-                            this.playExplosionSound(); // Play explosion sound immediately
-                            this.enemiesKilled++;
-                            this.enemyKillCount++;
-                            this.lastKillTime = this.time.now; // Reset the last kill time
-                            // Reset pacifist timer
-                            if (!this.pacifistAchieved) {
-                                this.pacifistTimer = 0;
-                            }
-                            // Increment the counter for enemies killed during boss fight
-                            if (this.enemies.getChildren().some(e => this.isBossEnemy(e))) {
-                                this.enemiesKilledDuringBossFight++;
-                            }
-                            // Update total kill count
-                            const totalKills = this.updateTotalKillCount();
-                            if (totalKills >= 10000) {
-                                this.unlockAchievement('veteran');
-                            }
-                            this.checkAchievements();
-                            if (enemyType === 'enemy1') {
-                                this.score += 20;
-                            } else if (enemyType === 'enemy2') {
-                                this.score += 10;
-                            } else if (enemyType === 'enemy3' && wasRegularEnemy3) {
-                                // Regular enemy3 (not sub-boss) - worth more than enemy2
-                                this.score += 30;
-                                // 40% chance to drop a power-up
-                                if (Math.random() < 0.4) {
-                                    this.spawnPowerUp(enemyX, enemyY);
-                                }
-                            } else if (wasSubBoss) {
-                                // Sub-boss scoring and rewards (uses boss sprite but wasSubBoss flag)
-                                this.score += wasScoreValue || 150;
-                                // Sub-boss has high chance to drop power-up
-                                if (Math.random() < 0.8) {
-                                    this.spawnPowerUp(enemyX, enemyY);
-                                }
-                                // Play extra explosion for sub-boss
-                                this.time.delayedCall(100, this.playExplosionSound, [], this);
-                            } else if (this.isBossEnemy({ texture: { key: enemyType } })) {
-                                // Main Boss scoring - progressive points based on level
-                                this.unlockAchievement('bossKill');
-                                const bossLevel = parseInt(enemyType.replace('boss', ''));
-                                this.score += 1000 + ((bossLevel - 1) * 250); // 1000, 1250, 1500, ...
-                            }
-                            this.scoreText.setText('Score: ' + this.score);
-                            // Handle MAIN boss destruction (all 8 bosses) - NOT sub-boss
-                            // Sub-boss uses boss sprites but should NOT trigger level completion
-                            if (this.isBossEnemy({ texture: { key: enemyType } }) && !wasSubBoss) {
-                                this.boss1HealthBar.destroy();
-                                this.boss1Destroyed = true;
-                                this.enemies.clear(true, true);
-                                this.enemyBullets.clear(true, true);
-                                this.playSeriesOfExplosions();
-                                this.time.delayedCall(2000, this.showWinScreen, [], this);
-                            } else if (enemyType === 'enemy1' && !this.boss1Destroyed) {
-                                // Play explosion sound again after an eighth of a second
-                                this.time.delayedCall(125, this.playExplosionSound, [], this);
-                                // 60% chance to drop a star
-                                if (Math.random() < 0.6) {
-                                    this.spawnPowerUp(enemyX, enemyY);
-                                }
-                                // Spawn enemy 2 at enemy 1's location if the condition is met and limit not reached
-                                if (this.spawnEnemy2OnEnemy1Destruction && this.enemy2SpawnedCount < 3) {
-                                    this.createEnemyTwo(enemyX, enemyY);
-                                    this.enemy2SpawnedCount++;
-                                    if (this.doubleEnemy2Spawn && this.enemy2SpawnedCount < 3) {
-                                        // Spawn a second enemy 2 with a slight offset
-                                        this.createEnemyTwo(enemyX + 20, enemyY + 20);
-                                        this.enemy2SpawnedCount++;
-                                    }
-                                }
-                            }
+                    if (!this.hero.isInvincible) {
+                        if ((enemy.texture.key === 'enemy1' && distance < 50) ||
+                            (enemy.texture.key === 'enemy2' && distance < 20) ||
+                            (enemy.texture.key === 'enemy3' && !enemy.isSubBoss && distance < 25)) {
+                            this.damageHero();
                         }
                     }
-                });
+                }
             });
         }
+        // Check for bullet-enemy collisions and off-screen enemies
+        this.enemies.getChildren().forEach((enemy) => {
+            // Protect bosses AND sub-boss from off-screen destruction (they spawn at y=-100 or y=-50)
+            // Regular enemy3 is NOT protected (only isSubBoss enemies are protected)
+            const isProtectedEnemy = this.isBossEnemy(enemy) || enemy.isSubBoss;
+            if (!isProtectedEnemy && (enemy.y > gameHeight || enemy.y < 0 || enemy.x > gameWidth || enemy.x < 0)) {
+                if (enemy.texture.key === 'enemy2' && this.enemy2BounceBehavior && Math.random() < (this.enemy2BounceChance || 0.3)) {
+                    // Check if enough time has passed since the last bounce
+                    if (time - enemy.lastBounceTime >= 500) { // 500 ms cooldown
+                        // Bounce logic for enemy 2
+                        if (enemy.y > gameHeight || enemy.y < 0) {
+                            enemy.setVelocityY(-enemy.body.velocity.y);
+                            // Flip sprite vertically when changing vertical direction  
+                            enemy.setFlipY(!enemy.flipY);
+                        }
+                        if (enemy.x > gameWidth || enemy.x < 0) {
+                            enemy.setVelocityX(-enemy.body.velocity.x);
+                        }
+                        // Ensure the enemy stays within bounds
+                        enemy.x = Phaser.Math.Clamp(enemy.x, 0, gameWidth);
+                        enemy.y = Phaser.Math.Clamp(enemy.y, 0, gameHeight);
+                        // Update the last bounce time
+                        enemy.lastBounceTime = time;
+                    }
+                } else {
+                    // Destroy both enemy 1 and enemy 2 (when not bouncing) if they go off-screen
+                    enemy.destroy();
+                }
+            }
+            this.playerBullets.getChildren().forEach((bullet) => {
+                const dx = enemy.x - bullet.x;
+                const dy = enemy.y - bullet.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                // Determine hit distance based on enemy type
+                // Use enemy-specific hitDistance if defined (bosses and mini-boss)
+                // Otherwise use default values based on texture key
+                let hitDistance = enemy.hitDistance || 50; // Default for regular enemies
+                if (this.isBossEnemy(enemy) && !enemy.hitDistance) {
+                    hitDistance = 110; // Fallback for bosses without hitDistance
+                }
+                if (distance < hitDistance) {
+                    this.createBulletExplosion(bullet.x, bullet.y);
+                    bullet.destroy();
+                    enemy.health -= 1; // Always decrease enemy health by 1
+                    this.playHitSound(); // Play hit sound
+                    // Update health bar for any boss (all 8 levels)
+                    if (this.isBossEnemy(enemy)) {
+                        this.updateboss1HealthBar(enemy);
+                    }
+                    if (enemy.health <= 0) {
+                        const enemyX = enemy.x;
+                        const enemyY = enemy.y;
+                        const enemyType = enemy.texture.key;
+                        // Store flags before destroying enemy
+                        const wasSubBoss = enemy.isSubBoss || false;
+                        const wasRegularEnemy3 = enemy.isRegularEnemy3 || false;
+                        const wasScoreValue = enemy.scoreValue;
+                        enemy.destroy();
+                        this.createExplosion(enemyX, enemyY, enemyType);
+                        this.playExplosionSound(); // Play explosion sound immediately
+                        this.enemiesKilled++;
+                        this.enemyKillCount++;
+                        this.lastKillTime = this.time.now; // Reset the last kill time
+                        // Reset pacifist timer
+                        if (!this.pacifistAchieved) {
+                            this.pacifistTimer = 0;
+                        }
+                        // Increment the counter for enemies killed during boss fight
+                        if (this.enemies.getChildren().some(e => this.isBossEnemy(e))) {
+                            this.enemiesKilledDuringBossFight++;
+                        }
+                        // Update total kill count
+                        const totalKills = this.updateTotalKillCount();
+                        if (totalKills >= 10000) {
+                            this.unlockAchievement('veteran');
+                        }
+                        this.checkAchievements();
+                        if (enemyType === 'enemy1') {
+                            this.score += 20;
+                        } else if (enemyType === 'enemy2') {
+                            this.score += 10;
+                        } else if (enemyType === 'enemy3' && wasRegularEnemy3) {
+                            // Regular enemy3 (not sub-boss) - worth more than enemy2
+                            this.score += 30;
+                            // 40% chance to drop a power-up
+                            if (Math.random() < 0.4) {
+                                this.spawnPowerUp(enemyX, enemyY);
+                            }
+                        } else if (wasSubBoss) {
+                            // Sub-boss scoring and rewards (uses boss sprite but wasSubBoss flag)
+                            this.score += wasScoreValue || 150;
+                            // Sub-boss has high chance to drop power-up
+                            if (Math.random() < 0.8) {
+                                this.spawnPowerUp(enemyX, enemyY);
+                            }
+                            // Play extra explosion for sub-boss
+                            this.time.delayedCall(100, this.playExplosionSound, [], this);
+                        } else if (this.isBossEnemy({ texture: { key: enemyType } })) {
+                            // Main Boss scoring - progressive points based on level
+                            this.unlockAchievement('bossKill');
+                            const bossLevel = parseInt(enemyType.replace('boss', ''));
+                            this.score += 1000 + ((bossLevel - 1) * 250); // 1000, 1250, 1500, ...
+                        }
+                        this.scoreText.setText('Score: ' + this.score);
+                        // Handle MAIN boss destruction (all 8 bosses) - NOT sub-boss
+                        // Sub-boss uses boss sprites but should NOT trigger level completion
+                        if (this.isBossEnemy({ texture: { key: enemyType } }) && !wasSubBoss) {
+                            this.boss1HealthBar.destroy();
+                            this.boss1Destroyed = true;
+                            this.enemies.clear(true, true);
+                            this.enemyBullets.clear(true, true);
+                            this.playSeriesOfExplosions();
+                            this.time.delayedCall(2000, this.showWinScreen, [], this);
+                        } else if (enemyType === 'enemy1' && !this.boss1Destroyed) {
+                            // Play explosion sound again after an eighth of a second
+                            this.time.delayedCall(125, this.playExplosionSound, [], this);
+                            // 60% chance to drop a star
+                            if (Math.random() < 0.6) {
+                                this.spawnPowerUp(enemyX, enemyY);
+                            }
+                            // Spawn enemy 2 at enemy 1's location if the condition is met and limit not reached
+                            if (this.spawnEnemy2OnEnemy1Destruction && this.enemy2SpawnedCount < 3) {
+                                this.createEnemyTwo(enemyX, enemyY);
+                                this.enemy2SpawnedCount++;
+                                if (this.doubleEnemy2Spawn && this.enemy2SpawnedCount < 3) {
+                                    // Spawn a second enemy 2 with a slight offset
+                                    this.createEnemyTwo(enemyX + 20, enemyY + 20);
+                                    this.enemy2SpawnedCount++;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        });
 
         // Check if the game has been won
         if (this.boss1Destroyed && !this.gameWon) {
@@ -1773,11 +1850,11 @@ class Example extends Phaser.Scene {
                 // Transform ship to max_hero when reaching weapon power 8
                 if (hero.weaponPower === 8 && !this.heroTransformed) {
                     this.heroTransformed = true;
-
+    
                     // Create shield transformation effect
                     const shieldCircle = this.add.circle(hero.x, hero.y, 40, 0xffffff, 0.8);
                     shieldCircle.setDepth(10);
-
+    
                     // Animate shield expanding and fading
                     this.tweens.add({
                         targets: shieldCircle,
@@ -1788,11 +1865,11 @@ class Example extends Phaser.Scene {
                         ease: 'Power2',
                         onComplete: () => shieldCircle.destroy()
                     });
-
+    
                     // Transform ship texture and size
                     hero.setTexture('max_hero');
                     hero.setScale(0.1); // User's preferred size
-
+    
                     this.sound.play('shieldSound', { volume: 0.6 });
                 }
                 */
@@ -1832,7 +1909,7 @@ class Example extends Phaser.Scene {
             this.weaponPowerText.setText(`Weapon Power: ${this.hero.weaponPower}`);
         } else {
             this.weaponPowerText = this.add.text(16, 50, `Weapon Power: ${this.hero.weaponPower}`, {
-                fontSize: '24px',
+                fontSize: '18px',
                 fill: '#fff'
             });
         }
@@ -3200,7 +3277,7 @@ class Level4 extends Phaser.Scene {
 // ============================================
 // MOBILE DETECTION AND DYNAMIC SIZING
 // ============================================
-const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 0);
 
 let gameWidth, gameHeight;
 
@@ -3251,7 +3328,7 @@ const config = {
             debug: false
         }
     },
-    scene: [IntroScreen, Example]
+    scene: [PreloadScene, IntroScreen, Example]
 };
 
 // Export isMobile for use in scenes
