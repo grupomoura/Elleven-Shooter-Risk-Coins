@@ -269,6 +269,7 @@ class Example extends Phaser.Scene {
         this.pacifistTimerText = null; // New property to store the pacifist timer text object
         this.playerLives = 0; // Extra lives counter
         this.currentLevel = 1; // Current level (1 = first boss, 2 = second boss, etc.)
+        this.levelTransitioning = false; // Flag to prevent multiple level transition calls
     }
     create() {
         // Initialize game objects and other elements
@@ -315,6 +316,7 @@ class Example extends Phaser.Scene {
         this.heroDestroyed = false;
         this.gameWon = false;
         this.boss1Destroyed = false;
+        this.levelTransitioning = false; // Reset transition flag for fresh start
 
         // Check if this is a level progression (coming from previous level)
         const isLevelProgression = this.registry.get('levelProgression');
@@ -1063,12 +1065,12 @@ class Example extends Phaser.Scene {
             enemyThree.setScale(0.5); // Slightly larger than enemy2 (0.2)
 
             // Speed similar to enemy2
-            const baseSpeed = 80;
+            const baseSpeed = 100;
             enemyThree.setVelocityY(baseSpeed * difficulty);
             enemyThree.setVelocityX(Phaser.Math.Between(-50, 50));
 
             // Double the health of enemy2 (enemy2 base = 2, enemy3 base = 4)
-            enemyThree.health = Math.max(2, Math.floor(4 * difficulty));
+            enemyThree.health = Math.max(2, Math.floor(5 * difficulty));
             enemyThree.isRegularEnemy3 = true; // Flag to identify as regular enemy (not sub-boss)
 
             // Random horizontal direction changes
@@ -1163,7 +1165,7 @@ class Example extends Phaser.Scene {
         // ============================================
         const SUB_BOSS_STATS = {
             scale: 0.5,          // Same size as current mini-boss
-            baseHealth: 25,      // Much more resistant than regular enemies
+            baseHealth: 30,      // Much more resistant than regular enemies
             speed: 60,           // Slower movement (menacing presence)
             hitDistance: 70,     // Larger hit area
             scoreValue: 150      // Worth more points
@@ -1465,17 +1467,19 @@ class Example extends Phaser.Scene {
         }
 
         // DEBUG: Track boss every second
-        if (!this.lastBossDebugTime || time - this.lastBossDebugTime > 1000) {
-            this.lastBossDebugTime = time;
-            const bosses = this.enemies.getChildren().filter(e => this.isBossEnemy(e));
-            if (bosses.length > 0) {
-                bosses.forEach(b => {
-                    console.log(`DEBUG Boss: active=${b.active}, visible=${b.visible}, alpha=${b.alpha}, x=${b.x}, y=${b.y}, texture=${b.texture.key}, depth=${b.depth}`);
-                });
-            } else {
-                console.log(`DEBUG: No bosses in enemies group. boss1Destroyed=${this.boss1Destroyed}, gameWon=${this.gameWon}, currentLevel=${this.currentLevel}`);
-            }
-        }
+        // if (!this.lastBossDebugTime || time - this.lastBossDebugTime > 1000) {
+        //     this.lastBossDebugTime = time;
+        //     const bosses = this.enemies.getChildren().filter(e => this.isBossEnemy(e));
+        //     if (bosses.length > 0) {
+        //         bosses.forEach(b => {
+        //             console.log(`DEBUG Boss: active=${b.active}, visible=${b.visible}, alpha=${b.alpha}, x=${b.x}, y=${b.y}, texture=${b.texture.key}, depth=${b.depth}`);
+        //         });
+        //     } else {
+        //         console.log(`DEBUG: No bosses in enemies group. boss1Destroyed=${this.boss1Destroyed}, gameWon=${this.gameWon}, currentLevel=${this.currentLevel}`);
+        //     }
+        // }
+
+
         // Handle boss (any type) horizontal movement
         this.enemies.getChildren().forEach((enemy) => {
             if (this.isBossEnemy(enemy)) {
@@ -1723,7 +1727,8 @@ class Example extends Phaser.Scene {
                         } else if (this.isBossEnemy({ texture: { key: enemyType } })) {
                             // Main Boss scoring - progressive points based on level
                             this.unlockAchievement('bossKill');
-                            const bossLevel = parseInt(enemyType.replace('boss', ''));
+                            // Handle 'finalboss' texture (Level 9) which doesn't have a number suffix
+                            const bossLevel = enemyType === 'finalboss' ? 9 : parseInt(enemyType.replace('boss', ''));
                             this.score += 1000 + ((bossLevel - 1) * 250); // 1000, 1250, 1500, ...
                         }
                         this.scoreText.setText('Score: ' + this.score);
@@ -2892,9 +2897,16 @@ class Example extends Phaser.Scene {
         }
     }
     showWinScreen() {
+        // Prevent multiple calls during level transition
+        if (this.levelTransitioning) {
+            return;
+        }
+
         if (!this.gameWon) {
             // Check if there are more levels (9 total)
             if (this.currentLevel < 9) {
+                // Set transitioning flag immediately to prevent race conditions
+                this.levelTransitioning = true;
                 // Properly destroy health bar from previous boss
                 if (this.boss1HealthBar) {
                     this.boss1HealthBar.destroy();
