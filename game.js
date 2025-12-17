@@ -88,12 +88,12 @@ class PreloadScene extends Phaser.Scene {
         this.load.image('background', 'assets/background.jpg');
         this.load.image('background2', 'assets/background02.jpg');
         this.load.image('background3', 'assets/background03.jpg');
-        this.load.image('star', 'assets/bitcoin.png');
+        this.load.image('star', 'assets/life.png');
         // New assets for coins and life
         this.load.image('coin1', 'assets/coin1.png');
         this.load.image('coin2', 'assets/coin2.png');
         this.load.image('coin3', 'assets/coin3.png');
-        this.load.image('life', 'assets/life.png');
+        this.load.image('life', 'assets/bitcoin.png');
         // Boss sprites for all 8 levels
         this.load.image('boss2', 'assets/boss2.png');
         this.load.image('boss3', 'assets/boss3.png');
@@ -2801,14 +2801,14 @@ class Example extends Phaser.Scene {
         // Determine drop type based on probability
         const dropChance = Math.random();
 
-        if (dropChance < 0.10) {
-            // 10% chance - Life drop
+        if (dropChance < 0.05) {
+            // 5% chance - Life drop
             this.spawnLife(x, y);
-        } else if (dropChance < 0.25) {
-            // 15% chance - Coin drop (score only)
+        } else if (dropChance < 0.70) {
+            // 65% chance - Coin drop (score only)
             this.spawnCoin(x, y);
         } else {
-            // 75% chance - Weapon upgrade (bitcoin)
+            // 30% chance - Weapon upgrade (bitcoin)
             const powerUp = this.powerUps.create(x, y, 'star');
             powerUp.setScale(0.5);
             powerUp.setVelocity(Phaser.Math.Between(-150, 150), Phaser.Math.Between(-150, 150));
