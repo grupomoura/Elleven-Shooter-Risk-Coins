@@ -562,7 +562,7 @@ class Example extends Phaser.Scene {
         // Create an instance of enemy 1
         this.createEnemyOne();
         // Add score text - responsive font size
-        const uiFontSize = window.isMobile ? '20px' : '28px';
+        const uiFontSize = window.isMobile ? '16px' : '20px';
         this.scoreText = this.add.text(16, 16, 'Score: 0', {
             fontSize: uiFontSize,
             fill: '#fff'
