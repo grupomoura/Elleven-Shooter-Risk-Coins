@@ -742,22 +742,12 @@ class Example extends Phaser.Scene {
         // ============================================
         // SUB-BOSS SPAWN TIMER (Level 2+ only)
         // Uses previous level's boss sprite with its attack patterns
-        // Spawns rarely, starting 100 seconds into the level
+        // Spawns ONCE at 100 seconds into the level (middle of the phase)
         // ============================================
         if (this.currentLevel >= 2) {
-            // First sub-boss appears at 100 seconds
+            // Sub-boss appears once at 100 seconds
             this.time.delayedCall(100000, () => {
                 this.createMiniBoss();
-            }, [], this);
-
-            // Then every 45 seconds (rare appearance)
-            this.time.delayedCall(100000, () => {
-                this.time.addEvent({
-                    delay: 50000, // Every 50 seconds
-                    callback: this.createMiniBoss,
-                    callbackScope: this,
-                    loop: false
-                });
             }, [], this);
         }
         // ============================================
@@ -1164,11 +1154,11 @@ class Example extends Phaser.Scene {
         // SUB-BOSS CONFIGURATION - Keep current size
         // ============================================
         const SUB_BOSS_STATS = {
-            scale: 0.5,          // Same size as current mini-boss
-            baseHealth: 30,      // Much more resistant than regular enemies
+            scale: 0.6,          // Same size as current mini-boss
+            baseHealth: 50,      // Much more resistant than regular enemies
             speed: 60,           // Slower movement (menacing presence)
             hitDistance: 70,     // Larger hit area
-            scoreValue: 150      // Worth more points
+            scoreValue: 250      // Worth more points
         };
         // ============================================
 
@@ -2804,11 +2794,11 @@ class Example extends Phaser.Scene {
         if (dropChance < 0.05) {
             // 5% chance - Life drop
             this.spawnLife(x, y);
-        } else if (dropChance < 0.70) {
-            // 65% chance - Coin drop (score only)
+        } else if (dropChance < 0.55) {
+            // 50% chance - Coin drop (score only)
             this.spawnCoin(x, y);
         } else {
-            // 30% chance - Weapon upgrade (bitcoin)
+            // 45% chance - Weapon upgrade (bitcoin)
             const powerUp = this.powerUps.create(x, y, 'star');
             powerUp.setScale(0.5);
             powerUp.setVelocity(Phaser.Math.Between(-150, 150), Phaser.Math.Between(-150, 150));
