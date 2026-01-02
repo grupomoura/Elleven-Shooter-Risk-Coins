@@ -2203,6 +2203,11 @@ class Example extends Phaser.Scene {
                     fill: '#ffffff'
                 }).setOrigin(0.5).setDepth(1001);
 
+                // Stop Phaser from capturing movement keys so they can be typed into the input
+                if (this.input.keyboard) {
+                    this.input.keyboard.removeCapture('W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE');
+                }
+
                 this.input.keyboard.enabled = true;
                 this.input.keyboard.on('keydown', () => {
                     if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
@@ -3304,6 +3309,11 @@ class Example extends Phaser.Scene {
                 fontSize: smallTextSize,
                 fill: '#ffffff'
             }).setOrigin(0.5).setDepth(1001);
+
+            // Stop Phaser from capturing movement keys so they can be typed into the input
+            if (this.input.keyboard) {
+                this.input.keyboard.removeCapture('W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE');
+            }
 
             this.input.keyboard.enabled = true;
             this.input.keyboard.on('keydown', () => {
