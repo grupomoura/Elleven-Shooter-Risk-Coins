@@ -79,7 +79,6 @@ class PreloadScene extends Phaser.Scene {
 
         // From Example Scene (Main Game)
         this.load.spritesheet('hero', 'assets/spaceship_spritesheet.png', { frameWidth: 80, frameHeight: 80 });
-        this.load.image('max_hero', 'assets/max_hero.gif');
         this.load.image('Cannon_bullet', 'assets/cannom_bullet.png');
         this.load.image('enemy1', 'assets/enemy1.png');
         this.load.image('enemy2', 'assets/enemy2.png');
@@ -122,6 +121,9 @@ class PreloadScene extends Phaser.Scene {
         this.load.audio('finalyMusic', 'assets/finaly.mp3');
         this.load.audio('cashSound', 'assets/cash_10.mp3');
         this.load.audio('lifeSound', 'assets/life.mp3');
+
+        // New intro background
+        this.load.image('introCover', 'assets/game_cover_intro.png');
     }
 
     create() {
@@ -149,82 +151,118 @@ class IntroScreen extends Phaser.Scene {
         const width = this.game.config.width;
         const height = this.game.config.height;
         const centerX = width / 2;
+        const centerY = height / 2;
         const isMobile = window.isMobile;
 
-        // Add background
-        this.add.rectangle(centerX, height / 2, width, height, 0x000000);
+        // Add intro cover background
+        const bg = this.add.image(centerX, 0, 'introCover').setOrigin(0.5, 0);
 
-        // Add title - responsive font size
-        const titleSize = isMobile ? '48px' : '64px';
-        this.add.text(centerX, height * 0.12, 'Star Shooter', {
-            fontSize: titleSize,
-            fill: '#ffffff'
-        }).setOrigin(0.5);
+        // Scale background to fill the screen while maintaining aspect ratio (Cover behavior)
+        const scaleX = width / bg.width;
+        const scaleY = height / bg.height;
+        const scale = Math.max(scaleX, scaleY);
+        bg.setScale(scale).setAlpha(0.6);
 
-        // Add game instructions - different for mobile vs desktop
-        const instructionSize = isMobile ? '18px' : '24px';
+        // Add a dark overlay to make text more readable
+        this.add.rectangle(centerX, centerY, width, height, 0x000000, 0.4);
+
+        // Add a vignette effect
+        const graphics = this.add.graphics();
+        graphics.fillGradientStyle(0x000000, 0x000000, 0x000000, 0x000000, 0, 0, 0.8, 0.8);
+        graphics.fillRect(0, 0, width, height);
+        graphics.setAlpha(0.5);
+
+        // Instructions container - moved slightly down to avoid clashing with image title
+        const instructionY = height * 0.48;
+        const instructionSize = isMobile ? '16px' : '20px';
         const instructions = isMobile ? [
-            'Como Jogar:',
-            '- Toque e arraste para mover a nave',
-            '- O tiro é automático enquanto toca',
-            '- Derrote o Chefe para vencer',
-            '- Colete estrelas para melhorar sua arma',
-            '',
-            'Toque na tela para iniciar o jogo'
+            'COMO JOGAR',
+            '• Arraste para mover a nave',
+            '• Tiro automático ao tocar',
+            '• Melhore sua arma com power coins'
         ] : [
-            'Como Jogar:',
-            '- Use as setas ou WASD para se mover',
-            '- Derrote o Chefe para vencer',
-            '- Colete estrelas para melhorar sua arma',
-            '- Estrelas dão mais pontos em níveis mais altos de arma',
-            '',
-            'Pressione Qualquer Tecla para iniciar o jogo'
+            'COMO JOGAR',
+            '• Use Setas ou WASD para se mover',
+            '• Pressione C para mover com o mouse',
+            '• Colete power coins para evoluir sua arma'
         ];
 
-        let yPosition = height * 0.25;
-        const lineSpacing = isMobile ? 32 : 40;
-        instructions.forEach(line => {
-            this.add.text(centerX, yPosition, line, {
-                fontSize: instructionSize,
-                fill: '#ffffff'
+        instructions.forEach((line, index) => {
+            const isHeader = index === 0;
+            this.add.text(centerX, instructionY + (index * (isMobile ? 28 : 35)), line, {
+                fontFamily: 'Inter',
+                fontSize: isHeader ? (isMobile ? '20px' : '24px') : instructionSize,
+                fontWeight: isHeader ? '700' : '400',
+                fill: isHeader ? '#00ccff' : '#ffffff',
+                alpha: 0.9
             }).setOrigin(0.5);
-            yPosition += lineSpacing;
         });
 
-        // Add achievements button below the instructions
-        const buttonSize = isMobile ? '18px' : '24px';
-        const achievementsButton = this.add.text(centerX, yPosition + 20, 'Clique aqui para ver as conquistas', {
-            fontSize: buttonSize,
-            fill: '#ffffff'
+        // Start Button / Call to Action
+        const startTextStr = isMobile ? 'TOQUE PARA INICIAR' : 'PRESSIONE QUALQUER TECLA';
+        const startY = height * 0.75;
+        const startText = this.add.text(centerX, startY, startTextStr, {
+            fontFamily: 'Orbitron',
+            fontSize: isMobile ? '22px' : '28px',
+            fill: '#ffffff',
+            backgroundColor: '#00ccff33',
+            padding: { x: 20, y: 10 }
         }).setOrigin(0.5).setInteractive();
-        achievementsButton.on('pointerdown', () => {
+
+        // Blinking animation for start text
+        this.tweens.add({
+            targets: startText,
+            alpha: 0.5,
+            duration: 800,
+            yoyo: true,
+            repeat: -1
+        });
+
+        // Achievements button with better styling
+        const achievementsY = height * 0.88;
+        const achievementsText = this.add.text(centerX, achievementsY, 'CENTRAL DE CONQUISTAS', {
+            fontFamily: 'Inter',
+            fontSize: isMobile ? '14px' : '16px',
+            fill: '#00ccff',
+            fontStyle: 'italic'
+        }).setOrigin(0.5).setInteractive();
+
+        achievementsText.on('pointerover', () => achievementsText.setFill('#ffffff'));
+        achievementsText.on('pointerout', () => achievementsText.setFill('#00ccff'));
+
+        achievementsText.on('pointerdown', () => {
             this.introMusic.stop();
             this.scene.start('AchievementsScreen');
         });
 
-        // Mobile: tap anywhere (except achievements button) to start
+        // Version Info
+        const version = this.game.config.gameVersion || '1.0.1';
+        this.add.text(width - 15, height - 15, `v${version}`, {
+            fontFamily: 'Inter',
+            fontSize: '12px',
+            fill: '#888888'
+        }).setOrigin(1, 1);
+
+        // Input Handling
         if (isMobile) {
             this.input.on('pointerdown', (pointer) => {
-                // Check if the tap was on the achievements button area
-                const buttonBounds = achievementsButton.getBounds();
-                if (!buttonBounds.contains(pointer.x, pointer.y)) {
-                    this.introMusic.stop();
-                    this.scene.start('Example');
+                const achBounds = achievementsText.getBounds();
+                if (!achBounds.contains(pointer.x, pointer.y)) {
+                    this.startGame();
                 }
             });
         } else {
-            // Desktop: keyboard to start
             this.input.keyboard.once('keydown', (event) => {
-                if (event.key !== ' ') {
-                    this.introMusic.stop();
-                    this.scene.start('Example');
+                if (event.key !== 'c' && event.key !== 'C') { // Don't start on 'C' (it might be intended for toggle, though not here)
+                    this.startGame();
                 }
             });
-            this.input.keyboard.once('keydown-SPACE', () => {
-                this.introMusic.stop();
-                this.scene.start('Example');
-            });
         }
+    }
+
+    startGame() {
+        this.introMusic.stop();
+        this.scene.start('Example');
     }
 }
 class Example extends Phaser.Scene {
@@ -1001,6 +1039,29 @@ class Example extends Phaser.Scene {
             if (this.time.now >= 35000) { // Only start firing if 35 seconds have passed
                 this.scheduleNextEnemyShot(enemyOne);
             }
+
+            // Return to center behavior - refined
+            enemyOne.centerTimer = this.time.addEvent({
+                delay: 3000,
+                callback: () => {
+                    if (enemyOne.active && (enemyOne.y > 450 || (enemyOne.y > 350 && enemyOne.body.velocity.y < 10))) {
+                        const targetY = Phaser.Math.Between(150, 300);
+                        this.tweens.add({
+                            targets: enemyOne,
+                            y: targetY,
+                            duration: 1200,
+                            ease: 'Cubic.easeOut',
+                            onComplete: () => {
+                                if (enemyOne.active) {
+                                    enemyOne.setVelocityY(this.enemy1RandomStop ? 0 : 50);
+                                    enemyOne.setVelocityX(Phaser.Math.Between(-50, 50));
+                                }
+                            }
+                        });
+                    }
+                },
+                loop: true
+            });
             // Check if random stop behavior should be applied
             if (this.enemy1RandomStop && Math.random() < 0.5) { // 50% chance to stop
                 this.time.delayedCall(3000, () => {
@@ -1717,8 +1778,17 @@ class Example extends Phaser.Scene {
                         } else if (this.isBossEnemy({ texture: { key: enemyType } })) {
                             // Main Boss scoring - progressive points based on level
                             this.unlockAchievement('bossKill');
+
                             // Handle 'finalboss' texture (Level 9) which doesn't have a number suffix
                             const bossLevel = enemyType === 'finalboss' ? 9 : parseInt(enemyType.replace('boss', ''));
+
+                            // Unlock level-specific achievement
+                            if (bossLevel < 9) {
+                                this.unlockAchievement(`level${bossLevel}_cleared`);
+                            } else {
+                                this.unlockAchievement('complete_victory');
+                            }
+
                             this.score += 1000 + ((bossLevel - 1) * 250); // 1000, 1250, 1500, ...
                         }
                         this.scoreText.setText('Score: ' + this.score);
@@ -2016,6 +2086,8 @@ class Example extends Phaser.Scene {
             this.gameOver = true;
             this.input.keyboard.enabled = false;
             this.playExplosionSound();
+            // Removed automatic saveScoreToHistory() to prevent "Piloto" records with 0 score.
+            // Scores will now only be saved manually via the button on the Game Over screen.
 
             this.time.delayedCall(1000, () => {
                 const gw = this.game.config.width;
@@ -2026,22 +2098,120 @@ class Example extends Phaser.Scene {
 
                 const overlay = this.add.rectangle(centerX, centerY, gw, gh, 0x000000, 0.7);
                 overlay.setDepth(1000);
-                this.add.text(centerX, centerY, 'Game Over', {
+                const gameOverText = this.add.text(centerX, centerY - 100, 'Game Over', {
                     fontSize: isMobile ? '48px' : '64px',
-                    fill: '#fff'
+                    fill: '#fff',
+                    fontWeight: 'bold'
                 }).setOrigin(0.5).setDepth(1001);
-                this.add.text(centerX, centerY + 50, isMobile ? 'Toque para reiniciar' : 'Pressione qualquer tecla para reiniciar', {
-                    fontSize: isMobile ? '18px' : '24px',
-                    fill: '#fff'
-                }).setOrigin(0.5).setDepth(1001);
-                this.input.keyboard.enabled = true;
 
-                // Support both keyboard and touch for restart
-                this.input.keyboard.once('keydown', () => {
+                // Vertical Stack positioning
+                const inputY = centerY;
+                const buttonY = centerY + 80;
+
+                // Name Input
+                const inputElement = document.createElement('input');
+                inputElement.type = 'text';
+                inputElement.placeholder = 'Digite seu nome';
+                inputElement.style.width = '260px';
+                inputElement.style.height = '42px';
+                inputElement.style.fontSize = '22px';
+                inputElement.style.textAlign = 'center';
+                inputElement.style.backgroundColor = 'rgba(0, 0, 0, 0.85)';
+                inputElement.style.color = '#00ccff';
+                inputElement.style.border = '2px solid #00ccff';
+                inputElement.style.borderRadius = '10px';
+                inputElement.style.fontFamily = 'Orbitron';
+                inputElement.style.outline = 'none';
+                inputElement.style.boxSizing = 'border-box';
+
+                const phaserInput = this.add.dom(centerX, inputY, inputElement).setOrigin(0.5).setDepth(1002);
+
+                // Enhanced Button Design
+                const btnWidth = 260;
+                const btnHeight = 55;
+
+                const btnBg = this.add.rectangle(centerX, buttonY, btnWidth, btnHeight, 0x00ccff, 0.3)
+                    .setStrokeStyle(3, 0x00ccff)
+                    .setDepth(1001)
+                    .setInteractive({ useHandCursor: true });
+
+                const saveBtnText = this.add.text(centerX, buttonY, 'TENTAR NOVAMENTE', {
+                    fontFamily: 'Orbitron',
+                    fontSize: '18px',
+                    fill: '#00ccff',
+                    fontWeight: 'bold',
+                    letterSpacing: 1
+                }).setOrigin(0.5).setDepth(1002);
+
+                // Update text dynamically
+                inputElement.addEventListener('input', () => {
+                    const name = inputElement.value.trim();
+                    if (name.length > 0) {
+                        saveBtnText.setText('SALVAR RECORDE');
+                        btnBg.setStrokeStyle(3, 0x00ff00);
+                        saveBtnText.setFill('#00ff00');
+                    } else {
+                        saveBtnText.setText('TENTAR NOVAMENTE');
+                        btnBg.setStrokeStyle(3, 0x00ccff);
+                        saveBtnText.setFill('#00ccff');
+                    }
+                });
+
+                btnBg.on('pointerover', () => {
+                    btnBg.setFillStyle(saveBtnText.text === 'SALVAR RECORDE' ? 0x00ff00 : 0x00ccff, 0.5);
+                    saveBtnText.setFill('#ffffff');
+                    this.tweens.add({
+                        targets: [btnBg, saveBtnText],
+                        scale: 1.05,
+                        duration: 100
+                    });
+                });
+                btnBg.on('pointerout', () => {
+                    const isSave = saveBtnText.text === 'SALVAR RECORDE';
+                    btnBg.setFillStyle(isSave ? 0x00ff00 : 0x00ccff, 0.3);
+                    btnBg.setStrokeStyle(3, isSave ? 0x00ff00 : 0x00ccff);
+                    saveBtnText.setFill(isSave ? 0x00ff00 : 0x00ccff);
+                    this.tweens.add({
+                        targets: [btnBg, saveBtnText],
+                        scale: 1,
+                        duration: 100
+                    });
+                });
+
+                btnBg.on('pointerdown', () => {
+                    const name = inputElement.value.trim();
+                    if (name.length > 0) {
+                        this.saveScoreToHistory(name);
+                        saveBtnText.setText('SALVO!');
+                        btnBg.setStrokeStyle(3, 0x00ff00);
+                        btnBg.setFillStyle(0x00ff00, 0.4);
+                        this.time.delayedCall(1000, () => {
+                            this.scene.start('IntroScreen');
+                        });
+                    } else {
+                        this.scene.start('IntroScreen');
+                    }
+
+                    btnBg.disableInteractive();
+                    if (phaserInput) phaserInput.setVisible(false);
+                });
+
+                const restartY = buttonY + 80;
+                this.add.text(centerX, restartY, isMobile ? 'Use o botão para reiniciar' : 'Use o botão ou pressione qualquer tecla', {
+                    fontFamily: 'Inter',
+                    fontSize: isMobile ? '16px' : '22px',
+                    fill: '#ffffff'
+                }).setOrigin(0.5).setDepth(1001);
+
+                this.input.keyboard.enabled = true;
+                this.input.keyboard.on('keydown', () => {
+                    if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
                     this.scene.start('IntroScreen');
                 });
                 if (isMobile) {
-                    this.input.once('pointerdown', () => {
+                    this.input.on('pointerdown', (pointer) => {
+                        // Ignore if clicking on input
+                        if (pointer.event.target.tagName === 'INPUT' || pointer.event.target.tagName === 'TEXTAREA') return;
                         this.scene.start('IntroScreen');
                     });
                 }
@@ -2110,15 +2280,61 @@ class Example extends Phaser.Scene {
         // isAnimated: Whether the boss uses spritesheet animation
         // ============================================
         const BOSS_CONFIG = {
-            1: { sprite: 'boss1', health: 100, scale: 0.7, hitDistance: 100 },
-            2: { sprite: 'boss2', health: 110, scale: 0.7, hitDistance: 110 },
-            3: { sprite: 'boss3', health: 121, scale: 0.7, hitDistance: 110 },
-            4: { sprite: 'boss4', health: 133, scale: 0.65, hitDistance: 105 },
-            5: { sprite: 'boss5', health: 146, scale: 0.65, hitDistance: 105 },
-            6: { sprite: 'boss6', health: 161, scale: 0.6, hitDistance: 100 },
-            7: { sprite: 'boss7', health: 177, scale: 0.6, hitDistance: 100 },
-            8: { sprite: 'boss8', health: 195, scale: 0.55, hitDistance: 95 },
-            9: { sprite: 'finalboss', health: 300, scale: 1, hitDistance: 120, isAnimated: true }
+            1: {
+                sprite: 'boss1',
+                health: 100,
+                scale: 0.7,
+                hitDistance: 100
+            },
+            2: {
+                sprite: 'boss2',
+                health: 110,
+                scale: 0.7,
+                hitDistance: 110
+            },
+            3: {
+                sprite: 'boss3',
+                health: 121,
+                scale: 0.7,
+                hitDistance: 110
+            },
+            4: {
+                sprite: 'boss4',
+                health: 133,
+                scale: 0.65,
+                hitDistance: 105
+            },
+            5: {
+                sprite: 'boss5',
+                health: 146,
+                scale: 0.65,
+                hitDistance: 105
+            },
+            6: {
+                sprite: 'boss6',
+                health: 161,
+                scale: 0.6,
+                hitDistance: 100
+            },
+            7: {
+                sprite: 'boss7',
+                health: 177,
+                scale: 0.6,
+                hitDistance: 100
+            },
+            8: {
+                sprite: 'boss8',
+                health: 195,
+                scale: 0.55,
+                hitDistance: 95
+            },
+            9: {
+                sprite: 'finalboss',
+                health: 300,
+                scale: 1,
+                hitDistance: 120,
+                isAnimated: true
+            }
         };
         // ============================================
 
@@ -2374,9 +2590,9 @@ class Example extends Phaser.Scene {
     enemyFourFirePattern(enemy) {
         if (enemy.active) {
             // 5-bullet spread pattern (more bullets than Level 1)
-            this.createEnemyBullet(enemy.x, enemy.y, 60);  // Far right
-            this.createEnemyBullet(enemy.x, enemy.y, 75);  // Right
-            this.createEnemyBullet(enemy.x, enemy.y, 90);  // Center
+            this.createEnemyBullet(enemy.x, enemy.y, 60); // Far right
+            this.createEnemyBullet(enemy.x, enemy.y, 75); // Right
+            this.createEnemyBullet(enemy.x, enemy.y, 90); // Center
             this.createEnemyBullet(enemy.x, enemy.y, 105); // Left
             this.createEnemyBullet(enemy.x, enemy.y, 120); // Far left
             // Faster fire rate (4000ms vs 5000ms)
@@ -2536,8 +2752,8 @@ class Example extends Phaser.Scene {
         if (!enemy.active) return;
 
         const screenWidth = this.sys.game.config.width;
-        const minY = 80;   // Top limit
-        const maxY = 300;  // Center of screen (maximum descent)
+        const minY = 80; // Top limit
+        const maxY = 300; // Center of screen (maximum descent)
 
         // Initial position
         enemy.targetY = 150;
@@ -2713,7 +2929,9 @@ class Example extends Phaser.Scene {
         enemyFive.maxHealth = 235;
         enemyFive.boss = true;
 
-        this.sound.play('alarmSound', { volume: 0.4 });
+        this.sound.play('alarmSound', {
+            volume: 0.4
+        });
 
         // Stop and start circular movement after 3 seconds
         this.time.delayedCall(3000, () => {
@@ -2988,32 +3206,155 @@ class Example extends Phaser.Scene {
                     fill: '#00ff00'
                 }).setOrigin(0.5).setDepth(1001);
             }
-            yPos += lineSpacing;
-            this.add.text(centerX, yPos, isMobile ? 'Toque para reiniciar' : 'Pressione qualquer tecla para reiniciar', {
+            // Name Input for Victory
+            const spaceBetween = isMobile ? 20 : 30; // Space between score text and input
+            const inputY = yPos + spaceBetween;
+            const buttonY = inputY + 80;
+
+            const inputElement = document.createElement('input');
+            inputElement.type = 'text';
+            inputElement.placeholder = 'Digite seu nome';
+            inputElement.style.width = '260px';
+            inputElement.style.height = '42px';
+            inputElement.style.fontSize = '22px';
+            inputElement.style.textAlign = 'center';
+            inputElement.style.backgroundColor = 'rgba(0, 0, 0, 0.85)';
+            inputElement.style.color = '#00ff00';
+            inputElement.style.border = '2px solid #00ff00';
+            inputElement.style.borderRadius = '10px';
+            inputElement.style.fontFamily = 'Orbitron';
+            inputElement.style.outline = 'none';
+            inputElement.style.boxSizing = 'border-box';
+
+            const phaserInput = this.add.dom(centerX, inputY, inputElement).setOrigin(0.5).setDepth(1002);
+
+            const btnWidth = 260;
+            const btnHeight = 55;
+
+            const btnBg = this.add.rectangle(centerX, buttonY, btnWidth, btnHeight, 0x00ff00, 0.3)
+                .setStrokeStyle(3, 0x00ff00)
+                .setDepth(1001)
+                .setInteractive({
+                    useHandCursor: true
+                });
+
+            const saveBtnText = this.add.text(centerX, buttonY, 'TENTAR NOVAMENTE', {
+                fontFamily: 'Orbitron',
+                fontSize: '18px',
+                fill: '#00ff00',
+                fontWeight: 'bold',
+                letterSpacing: 1
+            }).setOrigin(0.5).setDepth(1002);
+
+            // Update text dynamically
+            inputElement.addEventListener('input', () => {
+                const name = inputElement.value.trim();
+                if (name.length > 0) {
+                    saveBtnText.setText('SALVAR RECORDE');
+                    saveBtnText.setFill('#00ff00');
+                    btnBg.setStrokeStyle(3, 0x00ff00);
+                } else {
+                    saveBtnText.setText('TENTAR NOVAMENTE');
+                    saveBtnText.setFill('#ffffff'); // Make it neutral or green?
+                    btnBg.setStrokeStyle(3, 0x00ff00);
+                }
+            });
+
+            btnBg.on('pointerover', () => {
+                btnBg.setFillStyle(0x00ff00, 0.5);
+                btnBg.setStrokeStyle(4, 0xffffff);
+                saveBtnText.setFill('#ffffff');
+                this.tweens.add({
+                    targets: [btnBg, saveBtnText],
+                    scale: 1.05,
+                    duration: 100
+                });
+            });
+            btnBg.on('pointerout', () => {
+                btnBg.setFillStyle(0x00ff00, 0.3);
+                btnBg.setStrokeStyle(3, 0x00ff00);
+                saveBtnText.setFill('#00ff00');
+                this.tweens.add({
+                    targets: [btnBg, saveBtnText],
+                    scale: 1,
+                    duration: 100
+                });
+            });
+
+            btnBg.on('pointerdown', () => {
+                const name = inputElement.value.trim();
+                if (name.length > 0) {
+                    this.saveScoreToHistory(name);
+                    saveBtnText.setText('SALVO!');
+                    btnBg.setStrokeStyle(3, 0x00ff00);
+                    btnBg.setFillStyle(0x00ff00, 0.4);
+                    this.time.delayedCall(1000, () => {
+                        this.scene.start('IntroScreen');
+                    });
+                } else {
+                    this.scene.start('IntroScreen');
+                }
+
+                btnBg.disableInteractive();
+                if (phaserInput) phaserInput.setVisible(false);
+            });
+
+            this.add.text(centerX, buttonY + 80, isMobile ? 'Use o botão para reiniciar' : 'Use o botão ou pressione qualquer tecla para reiniciar', {
+                fontFamily: 'Inter',
                 fontSize: smallTextSize,
-                fill: '#fff'
+                fill: '#ffffff'
             }).setOrigin(0.5).setDepth(1001);
 
-            // Support both keyboard and touch for restart
-            this.input.keyboard.once('keydown', () => {
+            this.input.keyboard.enabled = true;
+            this.input.keyboard.on('keydown', () => {
+                if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
                 this.scene.start('IntroScreen');
             });
             if (isMobile) {
-                this.input.once('pointerdown', () => {
+                this.input.on('pointerdown', (pointer) => {
+                    if (pointer.event.target.tagName === 'INPUT' || pointer.event.target.tagName === 'TEXTAREA') return;
                     this.scene.start('IntroScreen');
                 });
             }
         }
     }
 
+    saveScoreToHistory(playerName) {
+        if (!playerName || playerName.trim() === '' || playerName === 'Piloto') return; // Enforce manual name entry
+        const historyStr = localStorage.getItem('scoreHistory') || '[]';
+        let history = JSON.parse(historyStr);
+
+        const newRecord = {
+            name: playerName,
+            score: this.score,
+            level: this.currentLevel,
+            date: new Date().toLocaleDateString('pt-BR'),
+            time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+        };
+
+        history.unshift(newRecord);
+        // Keep only top 10 scores
+        history = history.slice(0, 10);
+
+        localStorage.setItem('scoreHistory', JSON.stringify(history));
+
+        // Update High Score
+        let currentHighScore = parseInt(localStorage.getItem('highScore') || '0');
+        if (isNaN(currentHighScore)) currentHighScore = 0; // Handle legacy 'true' string
+
+        if (this.score > currentHighScore) {
+            localStorage.setItem('highScore', this.score.toString());
+        }
+    }
+
     playExplosionSound() {
         this.sound.play('boomSound', {
-            volume: 0.7
+            volume: 0.4
         });
     }
     playHitSound() {
         this.sound.play('hitSound', {
-            volume: 0.7
+            volume: 0.4
         });
     }
     playShieldSound() {
@@ -3054,7 +3395,7 @@ class Example extends Phaser.Scene {
             }
         }
         if (this.score >= 10000) {
-            this.unlockAchievement('highScore');
+            this.unlockAchievement('epic_score');
         }
         // Check for Pacifist achievement
         if (!this.pacifistAchieved && this.time.now - this.lastKillTime >= 20000) {
@@ -3078,13 +3419,22 @@ class Example extends Phaser.Scene {
             this.unlockAchievement('perfectionist');
         }
         // Check for Veteran achievement
-        if (parseInt(localStorage.getItem('totalEnemyKills')) >= 6000) {
+        if (parseInt(localStorage.getItem('totalEnemyKills')) >= 10000) {
             this.unlockAchievement('veteran');
         }
         // Check for Flying Blind achievement
         if (this.timeNearTop >= 5000 && !this.flyingBlindAchieved) {
             this.unlockAchievement('flyingBlind');
             this.flyingBlindAchieved = true;
+        }
+
+        // Check for level completion achievements if level just finished
+        if (this.boss1Destroyed) {
+            if (this.currentLevel < 9) {
+                this.unlockAchievement(`level${this.currentLevel}_cleared`);
+            } else {
+                this.unlockAchievement('complete_victory');
+            }
         }
         // Note: We don't need to check for the 'lucky' achievement here
         // as it's checked in the collectPowerUp method
@@ -3139,19 +3489,29 @@ class Example extends Phaser.Scene {
     }
     getAchievementName(key) {
         const achievementMap = {
-            'firstKill': 'Primeiro kill',
-            'tenKills': 'Dizimar',
-            'maxPower': 'Arma Suprema',
+            'firstKill': 'Primeiro Abate',
+            'tenKills': 'Exterminador',
+            'maxPower': 'Poder Máximo',
             'bossKill': 'Matador de Chefes',
-            'highScore': 'Pontuação Alta',
-            'pacifist': 'Pacifista',
-            'lucky': 'Sortudo',
-            'starDancer': 'Dançarino Estelar',
-            'knucklehead': 'Cabeça-Dura',
-            'badCat': 'Gato Mau',
-            'nuts': 'Louco!',
-            'greedy': 'Ganancioso',
-            'flyingBlind': 'Voo Cego'
+            'epic_score': 'Pontuação Épica',
+            'pacifist': 'Caminho da Paz',
+            'lucky': 'Sorte de Principiante',
+            'starDancer': 'Dançarino das Estrelas',
+            'knucklehead': 'Casca Grossa',
+            'badCat': 'Oportunista',
+            'nuts': 'Insano!',
+            'greedy': 'Olho Gordo',
+            'flyingBlind': 'Voo Cego',
+            'veteran': 'Veterano de Guerra',
+            'level1_cleared': 'Recruta Espacial',
+            'level2_cleared': 'Piloto de Testes',
+            'level3_cleared': 'Guardião de Órbita',
+            'level4_cleared': 'Interceptador',
+            'level5_cleared': 'As da Galáxia',
+            'level6_cleared': 'Comandante Estelar',
+            'level7_cleared': 'Lenda do Vácuo',
+            'level8_cleared': 'Soberano das Estrelas',
+            'complete_victory': 'Mestre do Universo'
         };
 
         return achievementMap[key] || key;
@@ -3310,8 +3670,358 @@ if (isMobile) {
     gameHeight = 600;
 }
 
+
+class AchievementsScreen extends Phaser.Scene {
+    constructor() {
+        super('AchievementsScreen');
+    }
+    create() {
+        const gw = this.game.config.width;
+        const gh = this.game.config.height;
+        const centerX = gw / 2;
+        const isMobile = window.isMobile;
+
+        // Background with gradient effect
+        this.add.rectangle(centerX, gh / 2, gw, gh, 0x000000);
+
+        // Add some "star" particles in background
+        for (let i = 0; i < 50; i++) {
+            const x = Phaser.Math.Between(0, gw);
+            const y = Phaser.Math.Between(0, gh);
+            const star = this.add.circle(x, y, Phaser.Math.Between(1, 2), 0xffffff, 0.3);
+            this.tweens.add({
+                targets: star,
+                alpha: 0.1,
+                duration: Phaser.Math.Between(1000, 3000),
+                yoyo: true,
+                repeat: -1
+            });
+        }
+
+        // Back Button
+        const backButton = this.add.text(20, 30, '← VOLTAR', {
+            fontFamily: 'Orbitron',
+            fontSize: isMobile ? '16px' : '20px',
+            fill: '#00ccff',
+            fontWeight: 'bold'
+        }).setOrigin(0, 0.5).setInteractive();
+
+        backButton.on('pointerover', () => backButton.setFill('#ffffff'));
+        backButton.on('pointerout', () => backButton.setFill('#00ccff'));
+        backButton.on('pointerdown', () => {
+            this.scene.start('IntroScreen');
+        });
+
+        // Title
+        this.add.text(centerX, 40, 'CENTRAL DE COMANDO', {
+            fontFamily: 'Orbitron',
+            fontSize: isMobile ? '22px' : '32px',
+            fill: '#ffffff',
+            fontWeight: 'bold'
+        }).setOrigin(0.5);
+
+        // Tabs
+        const tabY = 85;
+        this.currentTab = 'achievements'; // 'achievements' or 'history'
+
+        const achTab = this.add.text(centerX - (isMobile ? 70 : 100), tabY, 'CONQUISTAS', {
+            fontFamily: 'Orbitron',
+            fontSize: isMobile ? '14px' : '18px',
+            fill: '#ffffff',
+            padding: { x: 10, y: 5 }
+        }).setOrigin(0.5).setInteractive();
+
+        const histTab = this.add.text(centerX + (isMobile ? 70 : 100), tabY, 'HISTÓRICO', {
+            fontFamily: 'Orbitron',
+            fontSize: isMobile ? '14px' : '18px',
+            fill: '#888888',
+            padding: { x: 10, y: 5 }
+        }).setOrigin(0.5).setInteractive();
+
+        const tabIndicator = this.add.rectangle(achTab.x, tabY + 20, isMobile ? 110 : 150, 2, 0x00ccff);
+
+        achTab.on('pointerdown', () => this.switchTab('achievements', achTab, histTab, tabIndicator));
+        histTab.on('pointerdown', () => this.switchTab('history', achTab, histTab, tabIndicator));
+
+        // Content Area
+        this.contentGroup = this.add.group();
+        this.renderAchievements();
+    }
+
+    switchTab(tab, achTab, histTab, indicator) {
+        if (this.currentTab === tab) return;
+        this.currentTab = tab;
+
+        achTab.setFill(tab === 'achievements' ? '#ffffff' : '#888888');
+        histTab.setFill(tab === 'history' ? '#ffffff' : '#888888');
+
+        this.tweens.add({
+            targets: indicator,
+            x: tab === 'achievements' ? achTab.x : histTab.x,
+            duration: 200,
+            ease: 'Power2'
+        });
+
+        this.contentGroup.clear(true, true);
+
+        if (tab === 'achievements') {
+            this.renderAchievements();
+        } else {
+            this.renderHistory();
+        }
+    }
+
+    renderAchievements() {
+        const gw = this.game.config.width;
+        const gh = this.game.config.height;
+        const isMobile = window.isMobile;
+
+        const achievementsList = [
+            { key: 'level1_cleared', desc: 'Vença o nível 1' },
+            { key: 'level2_cleared', desc: 'Vença o nível 2' },
+            { key: 'level3_cleared', desc: 'Vença o nível 3' },
+            { key: 'level4_cleared', desc: 'Vença o nível 4' },
+            { key: 'level5_cleared', desc: 'Vença o nível 5' },
+            { key: 'level6_cleared', desc: 'Vença o nível 6' },
+            { key: 'level7_cleared', desc: 'Vença o nível 7' },
+            { key: 'level8_cleared', desc: 'Vença o nível 8' },
+            { key: 'complete_victory', desc: 'Derrote o Chefe Final' },
+            { key: 'firstKill', desc: 'Destrua seu primeiro inimigo' },
+            { key: 'tenKills', desc: 'Destrua 100 inimigos' },
+            { key: 'bossKill', desc: 'Derrote qualquer chefe' },
+            { key: 'epic_score', desc: 'Marque mais de 10.000 pontos' },
+            { key: 'maxPower', desc: 'Alcance o nível máximo de arma' },
+            { key: 'starDancer', desc: 'Vença um boss sem levar dano' },
+            { key: 'pacifist', desc: '20s sem destruir nada' },
+            { key: 'lucky', desc: 'Upgrade nos primeiros 21s' },
+            { key: 'nuts', desc: '30 coins sem upgrade lvl 3' },
+            { key: 'greedy', desc: 'Morra logo após pegar uma coin' },
+            { key: 'flyingBlind', desc: '10s no topo da tela' },
+            { key: 'veteran', desc: '10.000 kills acumulados' }
+        ];
+
+        let yStart = 140;
+        const spacing = isMobile ? 42 : 52;
+        const margin = isMobile ? 15 : 40;
+
+        achievementsList.forEach((ach, index) => {
+            const yPos = yStart + (index * spacing);
+            const isUnlocked = localStorage.getItem(ach.key) === 'true';
+            const name = this.getAchievementName(ach.key);
+
+            const card = this.add.rectangle(gw / 2, yPos, gw - (margin * 2), spacing - 6, 0x1a1a1a, 0.8);
+            card.setStrokeStyle(1, isUnlocked ? 0x00ff00 : 0x333333);
+
+            const icon = this.add.text(margin + 20, yPos, isUnlocked ? '🏆' : '🔒', {
+                fontSize: isMobile ? '18px' : '22px'
+            }).setOrigin(0.5);
+
+            const title = this.add.text(margin + 45, yPos - 8, name, {
+                fontFamily: 'Inter',
+                fontSize: isMobile ? '13px' : '15px',
+                fontWeight: 'bold',
+                fill: isUnlocked ? '#00ff00' : '#777777'
+            }).setOrigin(0, 0.5);
+
+            const descText = this.add.text(margin + 45, yPos + 8, ach.desc, {
+                fontFamily: 'Inter',
+                fontSize: isMobile ? '9px' : '11px',
+                fill: isUnlocked ? '#cccccc' : '#444444'
+            }).setOrigin(0, 0.5);
+
+            this.contentGroup.add(card);
+            this.contentGroup.add(icon);
+            this.contentGroup.add(title);
+            this.contentGroup.add(descText);
+        });
+
+        this.setupScrolling();
+    }
+
+    renderHistory() {
+        const gw = this.game.config.width;
+        const gh = this.game.config.height;
+        const isMobile = window.isMobile;
+        const historyStr = localStorage.getItem('scoreHistory') || '[]';
+        const history = JSON.parse(historyStr);
+        let highScore = localStorage.getItem('highScore') || '0';
+        if (highScore === 'true') highScore = '0'; // Fix legacy collision
+
+        let yPos = 140;
+        const margin = isMobile ? 20 : 50;
+
+        const totalKills = localStorage.getItem('totalEnemyKills') || '0';
+
+        // High Score Header
+        const hsBox = this.add.rectangle(gw / 2, yPos, gw - (margin * 2), 60, 0x00ccff, 0.15);
+        hsBox.setStrokeStyle(2, 0x00ccff);
+        this.contentGroup.add(hsBox);
+
+        const hsTitle = this.add.text(gw / 2 - (isMobile ? 0 : 100), yPos - 12, 'RECORDE PESSOAL', {
+            fontFamily: 'Orbitron',
+            fontSize: isMobile ? '11px' : '13px',
+            fill: '#00ccff'
+        }).setOrigin(isMobile ? 0.5 : 1, 0.5);
+        this.contentGroup.add(hsTitle);
+
+        const hsValue = this.add.text(gw / 2 - (isMobile ? 0 : 100), yPos + 10, highScore, {
+            fontFamily: 'Orbitron',
+            fontSize: isMobile ? '24px' : '30px',
+            fill: '#ffffff',
+            fontWeight: 'bold'
+        }).setOrigin(isMobile ? 0.5 : 1, 0.5);
+        this.contentGroup.add(hsValue);
+
+        // Total Kills Stat (for Desktop, or separate on Mobile)
+        if (!isMobile) {
+            const tkTitle = this.add.text(gw / 2 + 100, yPos - 12, 'TOTAL DE ABATES', {
+                fontFamily: 'Orbitron',
+                fontSize: '13px',
+                fill: '#ff3333'
+            }).setOrigin(0, 0.5);
+            this.contentGroup.add(tkTitle);
+
+            const tkValue = this.add.text(gw / 2 + 100, yPos + 10, totalKills, {
+                fontFamily: 'Orbitron',
+                fontSize: '30px',
+                fill: '#ffffff',
+                fontWeight: 'bold'
+            }).setOrigin(0, 0.5);
+            this.contentGroup.add(tkValue);
+        } else {
+            // On mobile, maybe shrink or put below
+            yPos += 80;
+            const tkBox = this.add.rectangle(gw / 2, yPos, gw - (margin * 2), 60, 0xff3333, 0.1);
+            tkBox.setStrokeStyle(2, 0xff3333);
+            this.contentGroup.add(tkBox);
+
+            this.contentGroup.add(this.add.text(gw / 2, yPos - 12, 'TOTAL DE ABATES', {
+                fontFamily: 'Orbitron', fontSize: '11px', fill: '#ff3333'
+            }).setOrigin(0.5));
+
+            this.contentGroup.add(this.add.text(gw / 2, yPos + 10, totalKills, {
+                fontFamily: 'Orbitron', fontSize: '24px', fill: '#ffffff', fontWeight: 'bold'
+            }).setOrigin(0.5));
+        }
+
+        yPos += 80;
+
+        if (history.length === 0) {
+            const noData = this.add.text(gw / 2, yPos + 50, 'NENHUM DADO DISPONÍVEL', {
+                fontFamily: 'Inter',
+                fontSize: '15px',
+                fill: '#555555'
+            }).setOrigin(0.5);
+            this.contentGroup.add(noData);
+            return;
+        }
+
+        history.forEach((rec, index) => {
+            const spacing = 65;
+            const cardY = yPos + (index * spacing);
+            const box = this.add.rectangle(gw / 2, cardY, gw - (margin * 2), 58, 0x111111, 0.9);
+            box.setStrokeStyle(1, 0x222222);
+
+            const scoreText = this.add.text(margin + 20, cardY, `${rec.name || '---'} : ${rec.score}`, {
+                fontFamily: 'Orbitron',
+                fontSize: isMobile ? '16px' : '20px',
+                fill: '#ffffff',
+                fontWeight: 'bold'
+            }).setOrigin(0, 0.5);
+
+            const lvlText = this.add.text(gw - margin - 20, cardY - 10, `LEVEL ${rec.level}`, {
+                fontFamily: 'Orbitron',
+                fontSize: isMobile ? '12px' : '14px',
+                fill: '#00ccff'
+            }).setOrigin(1, 0.5);
+
+            const dateText = this.add.text(gw - margin - 20, cardY + 10, `${rec.date} ${rec.time}`, {
+                fontFamily: 'Inter',
+                fontSize: isMobile ? '10px' : '11px',
+                fill: '#666666'
+            }).setOrigin(1, 0.5);
+
+            this.contentGroup.add(box);
+            this.contentGroup.add(scoreText);
+            this.contentGroup.add(lvlText);
+            this.contentGroup.add(dateText);
+        });
+    }
+
+    setupScrolling() {
+        if (this.scrollHandler) return;
+
+        this.scrollHandler = (pointer, gameObjects, deltaX, deltaY) => {
+            if (this.currentTab === 'achievements') {
+                this.scrollContent(-deltaY);
+            }
+        };
+
+        this.input.on('wheel', this.scrollHandler);
+
+        this.touchHandler = (pointer) => {
+            if (pointer.isDown && this.currentTab === 'achievements') {
+                const diff = pointer.y - pointer.prevPosition.y;
+                this.scrollContent(diff);
+            }
+        };
+        this.input.on('pointermove', this.touchHandler);
+    }
+
+    scrollContent(delta) {
+        const children = this.contentGroup.getChildren();
+        if (children.length === 0) return;
+
+        // Find items that help with bounds
+        const minY = children[0].y;
+        const maxY = children[children.length - 1].y;
+
+        if (delta > 0 && minY >= 140) return;
+        if (delta < 0 && maxY <= this.game.config.height - 25) return;
+
+        children.forEach(child => {
+            child.y += delta;
+            child.visible = (child.y > 110 && child.y < this.game.config.height - 10);
+        });
+    }
+
+    getAchievementName(key) {
+        const achievementMap = {
+            'firstKill': 'Primeiro Abate',
+            'tenKills': 'Exterminador',
+            'maxPower': 'Poder Máximo',
+            'bossKill': 'Matador de Chefes',
+            'epic_score': 'Pontuação Épica',
+            'pacifist': 'Caminho da Paz',
+            'lucky': 'Sorte de Principiante',
+            'starDancer': 'Dançarino das Estrelas',
+            'knucklehead': 'Casca Grossa',
+            'badCat': 'Oportunista',
+            'nuts': 'Insano!',
+            'greedy': 'Olho Gordo',
+            'flyingBlind': 'Voo Cego',
+            'veteran': 'Veterano de Guerra',
+            'level1_cleared': 'Recruta Espacial',
+            'level2_cleared': 'Piloto de Testes',
+            'level3_cleared': 'Guardião de Órbita',
+            'level4_cleared': 'Interceptador',
+            'level5_cleared': 'As da Galáxia',
+            'level6_cleared': 'Comandante Estelar',
+            'level7_cleared': 'Lenda do Vácuo',
+            'level8_cleared': 'Soberano das Estrelas',
+            'complete_victory': 'Mestre do Universo'
+        };
+        return achievementMap[key] || key;
+    }
+}
+
+// ============================================
+// GAME CONFIGURATION AND INITIALIZATION
+// ============================================
 const config = {
     type: Phaser.AUTO,
+    version: '1.0.1', // Internal Phaser version
+    gameVersion: '1.0.1', // Custom game version from package.json
     width: gameWidth,
     height: gameHeight,
     parent: 'game-container',
@@ -3330,134 +4040,13 @@ const config = {
             debug: false
         }
     },
-    scene: [PreloadScene, IntroScreen, Example]
+    dom: {
+        createContainer: true
+    },
+    scene: [PreloadScene, IntroScreen, Example, AchievementsScreen]
 };
 
 // Export isMobile for use in scenes
 window.isMobile = isMobile;
 
 const game = new Phaser.Game(config);
-class AchievementsScreen extends Phaser.Scene {
-    constructor() {
-        super('AchievementsScreen');
-    }
-    create() {
-        const gw = this.game.config.width;
-        const gh = this.game.config.height;
-        const centerX = gw / 2;
-        const isMobile = window.isMobile;
-
-        this.add.rectangle(centerX, gh / 2, gw, gh, 0x000000);
-
-        const backButton = this.add.text(20, 30, 'Voltar', {
-            fontSize: isMobile ? '18px' : '24px',
-            fill: '#ffffff'
-        }).setOrigin(0, 0.5).setInteractive();
-        backButton.on('pointerdown', () => {
-            this.scene.start('IntroScreen');
-        });
-
-        this.add.text(centerX, 30, 'Conquistas', {
-            fontSize: isMobile ? '24px' : '36px',
-            fill: '#ffffff'
-        }).setOrigin(0.5);
-
-        const achievements = [{
-            key: 'firstKill',
-            name: 'Primeira kill',
-            description: 'Destrua seu primeiro inimigo'
-        }, {
-            key: 'fallen',
-            name: 'Caído',
-            description: 'Seja atingido 10 vezes durante um nível'
-        }, {
-            key: 'flyingBlind',
-            name: 'Voo Cego',
-            description: 'Passe 10 segundos no topo'
-        }, {
-            key: 'greedy',
-            name: 'Ganancioso',
-            description: 'Morra em 1/3 de segundo após pegar uma estrela'
-        }, {
-            key: 'tenKills',
-            name: 'Dizimar',
-            description: 'Destrua 100 inimigos'
-        }, {
-            key: 'maxPower',
-            name: 'Arma Suprema',
-            description: 'Alcance o poder máximo da arma'
-        }, {
-            key: 'bossKill',
-            name: 'Matador de Chefes',
-            description: 'Derrote o chefe'
-        }, {
-            key: 'highScore',
-            name: 'Pontuação Alta',
-            description: 'Marque mais de 10.000 pontos'
-        }, {
-            key: 'pacifist',
-            name: 'Pacifista',
-            description: 'Não mate nada por 20 segundos'
-        }, {
-            key: 'lucky',
-            name: 'Sortudo',
-            description: 'Consiga uma melhoria de arma nos primeiros 21 segundos'
-        }, {
-            key: 'starDancer',
-            name: 'Dançarino Estelar',
-            description: 'Vença sem ser atingido'
-        }, {
-            key: 'knucklehead',
-            name: 'Cabeça-Dura',
-            description: 'Chegue ao chefe sem melhorar'
-        }, {
-            key: 'badCat',
-            name: 'Gato Mau',
-            description: 'Adquira uma melhoria durante a luta com o chefe'
-        }, {
-            key: 'nuts',
-            name: 'Louco!',
-            description: 'Colete 30 estrelas sem alcançar o nível 3 de melhoria'
-        }, {
-            key: 'vindictive',
-            name: 'Vingativo',
-            description: 'Mate 200 inimigos durante a luta com o chefe'
-        }, {
-            key: 'perfectionist',
-            name: 'Perfeccionista',
-            description: 'Colete 60 estrelas sem perder nenhuma'
-        }, {
-            key: 'veteran',
-            name: 'Veterano',
-            description: 'Mate 6.000 inimigos em todos os jogos'
-        }];
-
-        const fontSize = isMobile ? '11px' : '18px';
-        const lineHeight = isMobile ? 22 : 30;
-        let yPos = 60;
-
-        achievements.forEach(achievement => {
-            const achieved = localStorage.getItem(achievement.key) === 'true';
-            const color = achieved ? '#00ff00' : '#ff0000';
-            const status = achieved ? '✓' : '✗';
-
-            // Mobile: show name + status on one line, description below if space allows
-            if (isMobile) {
-                this.add.text(15, yPos, `${status} ${achievement.name}`, {
-                    fontSize: fontSize,
-                    fill: color
-                });
-            } else {
-                this.add.text(50, yPos, `${achievement.name}: ${achievement.description}`, {
-                    fontSize: fontSize,
-                    fill: color
-                });
-                this.add.text(gw - 50, yPos, achieved ? 'Achieved' : 'Not Achieved', {
-                    fontSize: fontSize,
-                    fill: color
-                }).setOrigin(1, 0);
-            }
-            yPos += lineHeight;
-        });
-    }
-}
